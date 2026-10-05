@@ -128,6 +128,24 @@ nav.tabs button[aria-current="page"]{color:var(--ink);border-top-color:var(--fjo
 .toast.show{opacity:1}
 .sync{font-size:.8rem;color:var(--muted);margin-top:28px;text-align:center}
 [hidden]{display:none!important}
+.rule{padding:10px 12px;border-left:3px solid var(--str);background:var(--bg);border-radius:0 8px 8px 0;margin:4px 0 8px}
+dl.gl{margin:8px 0 0}
+dl.gl dt{font-weight:600;margin-top:10px}
+dl.gl dd{margin:2px 0 0;color:var(--ink)}
+details.gloss{background:var(--surface);border-radius:8px;padding:10px 12px;margin:0 0 10px;font-size:.92rem}
+details.gloss summary{cursor:pointer;color:var(--fjord);font-weight:600;min-height:28px}
+fieldset.ex{border:1px solid var(--line);border-radius:10px;padding:10px 12px 12px;margin:0 0 10px;background:var(--surface);min-width:0}
+fieldset.ex legend{font-family:"Barlow Condensed",sans-serif;font-weight:600;font-size:1.15rem;padding:0 4px}
+fieldset.ex .exname{min-height:38px;font-family:Barlow,sans-serif;font-size:1rem}
+.rx{font-size:.85rem;color:var(--muted)}
+.last{font-size:.85rem;color:var(--fjord);margin-top:2px}
+.setrow{display:grid;grid-template-columns:22px 1fr 14px 1fr;gap:6px;align-items:center;margin-top:6px}
+.setrow input{min-height:42px;padding:8px 10px}
+.setrow .sn,.setrow .x{color:var(--muted);font-size:.9rem;text-align:center}
+.addset{background:none;border:none;color:var(--fjord);font-weight:600;padding:8px 0 0;min-height:36px}
+.setsum{font-size:.85rem;color:var(--muted);margin-top:2px}
+.setsum span{color:var(--ink)}
+.chart select{margin-top:4px}
 .wo .open{background:none;border:none;padding:0;text-align:left;cursor:pointer;color:inherit;width:100%}
 .wo .open .more{color:var(--fjord);font-size:.85rem;font-weight:600;margin-top:4px;display:inline-block}
 .pl .open{background:none;border:none;padding:0;text-align:left;color:inherit;cursor:pointer;text-decoration:underline;text-decoration-color:var(--line);text-underline-offset:3px}
@@ -368,12 +386,21 @@ const STR_WARMUP = SEC('Lämmittely 8–10 min', ul([
   'Glute bridge 2×10',
   'Pääliikkeen nousevat sarjat: tyhjä tanko × 8, 50 % × 5, 70 % × 3, 80 % × 1–2'
 ]));
-const STR_RULES = SEC('Muista', ul([
-  'RIR 2 = sarjan lopussa jaksaisit vielä 2 toistoa. Ei sarjoja uupumukseen.',
-  'Pareittain merkityt liikkeet (A1/A2) tehdään supersarjana: jalkaliike, sitten yläkropan liike palautuksen aikana.',
-  'Kun kaikki sarjat menevät toistohaarukan ylärajalla RIR 2:lla, nosta kuormaa (jalat 2,5–5 kg, yläkroppa 1–2,5 kg).',
-  'Kova uinti ennen salia, ei sen jälkeen. Kirjaa pääliikkeen paino ja RIR muistiinpanoon.'
-]));
+const WEIGHT_RULE = `<div class="rule"><b>Sama paino kaikissa työsarjoissa.</b> Kun ohjelmassa lukee esim. 4 × 4–6, kaikki neljä sarjaa tehdään samalla painolla. Nousevat painot (tyhjä tanko → 50 % → 70 % → 80 %) ovat vain lämmittelyä, eikä niitä kirjata työsarjoiksi.</div>
+<ul><li>Jos RIR jää tavoitetta pienemmäksi kesken liikkeen, pudota painoa 5–10 % loppusarjoihin.</li>
+<li>Nosta painoa vasta <b>seuraavalla kerralla</b>, kun kaikki sarjat menivät toistohaarukan ylärajalla tavoite-RIR:llä: jalkaliikkeet +2,5–5 kg, yläkroppa +1–2,5 kg.</li></ul>`;
+const STR_GLOSSARY = `<dl class="gl">
+<dt>4 × 4–6</dt><dd>4 työsarjaa, joissa kussakin 4–6 toistoa. Aloita haarukan alarajalta ja lisää toistoja kerta kerralta.</dd>
+<dt>/jalka, /puoli</dt><dd>Toistomäärä tehdään kummallekin puolelle erikseen.</dd>
+<dt>RIR</dt><dd><i>Reps in reserve</i>: montako toistoa olisi vielä jäänyt varaan sarjan lopussa. RIR 3 = olisit jaksanut vielä 3 (kevyt, tekniikan opettelu). RIR 2 = vielä 2 (normaali työsarja). RIR 1 = vielä 1 (raskas). Sarjoja ei viedä uupumukseen.</dd>
+<dt>80–85 %</dt><dd>Prosentti maksimista (1RM) eli painosta, jonka jaksaisit nostaa kerran. Jos et tiedä maksimiasi, valitse paino RIR:n avulla: paino on oikea, kun tavoite-RIR toteutuu.</dd>
+<dt>A1 / A2 (supersarja)</dt><dd>Tee sarja A1, lepää noin 60–90 s, tee sarja A2, lepää ja palaa A1:een. Kun A-parin kaikki sarjat on tehty, siirry B-pariin.</dd>
+<dt>3 s alas</dt><dd>Laske paino hallitusti kolmessa sekunnissa, nosta normaalisti.</dd>
+<dt>Eksentrinen</dt><dd>Liikkeen jarruttava vaihe. Nordicissa lasket itsesi eteenpäin mahdollisimman hitaasti.</dd>
+<dt>Lepo</dt><dd>Pääliikkeissä (kyykky, maastaveto, penkki) noin 2–3 min, apuliikkeissä 60–90 s.</dd>
+</dl>`;
+const STR_RULES = SEC('Paino ja eteneminen', WEIGHT_RULE);
+const STR_GLOSS = SEC('Merkinnät selitettynä', STR_GLOSSARY);
 const VA = [
   ['Takakyykky','4 × 4–6','80–85 %, RIR 2','A1'],
   ['Leuanveto (lisäpaino kun 8 toistoa onnistuu)','4 × 5–8','RIR 2','A2'],
@@ -411,24 +438,25 @@ function strengthDetail(x,k,light){
     else if (A && jan){ rows[0] = ['Takakyykky','5 × 3','85–88 %, RIR 1–2','A1']; }
     if (!intro_) intro_ = A ? 'Jalat ja vetävät liikkeet, noin 60 min.' : 'Jalat ja punnertavat liikkeet, noin 55 min.';
     if (k >= '2029-10-01' && !A) extra.push(NORSE_STR);
-    return {intro:intro_, secs:[STR_WARMUP, SEC('Ohjelma', tbl(rows,SH)), ...extra, lightTxt, STR_RULES]};
+    return {ex:rows, intro:intro_, secs:[STR_WARMUP, SEC('Ohjelma', tbl(rows,SH)), ...extra, lightTxt, STR_RULES, STR_GLOSS]};
   }
   if (/^Voima 1/.test(t)){
     const m6 = k >= '2027-03-22';
     rows = m6 ? [['Takakyykky','3 × 3–5','80–85 %, RIR 2–3'],['Leuanveto','3 × 5–8','RIR 2'],['Penkkipunnerrus','3 × 5–8','RIR 2'],['Istuva pohjenosto','3 × 8','raskas'],['Yhden käden soutu','2 × 8/puoli','RIR 2']]
       : [['Takakyykky tai trap bar -maastaveto','3 × 3–5','80–85 %, RIR 2–3'],['Leuanveto','3 × 5–8','RIR 2'],['Bulgarialainen askelkyykky','2–3 × 6/jalka','RIR 2–3'],['Istuva pohjenosto','3 × 8–10','raskas'],['Nordic hamstring','2 × 4–5','–']];
-    return {intro:'Jalat ylläpidolla ja vetävät liikkeet. Illalla, vähintään 6 h aamun laatujuoksun jälkeen.'+(m6?' Tämä on jakson ainoa voimaharjoitus viikossa.':''),
-      secs:[STR_WARMUP, SEC('Ohjelma', tbl(rows,['Liike','Sarjat × toistot','Kuorma'])), lightTxt, STR_RULES]};
+    return {ex:rows, intro:'Jalat ylläpidolla ja vetävät liikkeet. Illalla, vähintään 6 h aamun laatujuoksun jälkeen.'+(m6?' Tämä on jakson ainoa voimaharjoitus viikossa.':''),
+      secs:[STR_WARMUP, SEC('Ohjelma', tbl(rows,['Liike','Sarjat × toistot','Kuorma'])), lightTxt, STR_RULES, STR_GLOSS]};
   }
   if (/^Voima 2/.test(t)){
     rows = [['Penkkipunnerrus','4 × 5–8','RIR 2'],['Yhden käden käsipainosoutu','3 × 8/puoli','RIR 2'],['Pystypunnerrus käsipainoilla','3 × 6–8','RIR 2'],['Suorin käsin taljaveto','2 × 12','kevyt–keski'],['Yhden jalan pohjenosto','2 × 12','lisäpaino'],['Pallof press + Kööpenhamina-lankku','2 × 10 / 2 × 20 s','–']];
-    return {intro:'Yläkroppapainotteinen, noin 40 min. Ei raskaita jalkaliikkeitä, jotta lauantain pitkä lenkki ei kärsi.', secs:[STR_WARMUP, SEC('Ohjelma', tbl(rows,['Liike','Sarjat × toistot','Kuorma'])), lightTxt, STR_RULES]};
+    return {ex:rows, intro:'Yläkroppapainotteinen, noin 40 min. Ei raskaita jalkaliikkeitä, jotta lauantain pitkä lenkki ei kärsi.', secs:[STR_WARMUP, SEC('Ohjelma', tbl(rows,['Liike','Sarjat × toistot','Kuorma'])), lightTxt, STR_RULES, STR_GLOSS]};
   }
   if (/Viimeinen raskas/.test(t)){
-    return {intro:'Viimeinen raskas jalkatreeni ennen maratonia.', secs:[STR_WARMUP, SEC('Ohjelma', tbl([['Takakyykky','2 × 3','80 %'],['Leuanveto','3 × 5–8','RIR 2'],['Penkkipunnerrus','3 × 5–8','RIR 2'],['Muut liikkeet','2 sarjaa','kevyesti']],['Liike','Sarjat × toistot','Kuorma']))]};
+    rows = [['Takakyykky','2 × 3','80 %'],['Leuanveto','3 × 5–8','RIR 2'],['Penkkipunnerrus','3 × 5–8','RIR 2']];
+    return {ex:rows, intro:'Viimeinen raskas jalkatreeni ennen maratonia. Muut liikkeet 2 sarjaa kevyesti.', secs:[STR_WARMUP, SEC('Ohjelma', tbl(rows,['Liike','Sarjat × toistot','Kuorma'])), STR_RULES, STR_GLOSS]};
   }
   if (/aktivointi/.test(t)){
-    return {intro:'Pidä keho virkeänä ilman väsymystä.', secs:[SEC('Ohjelma', ul(['Kevyt kyykky 2 × 5','Pogo-hypyt 2 × 10','Yläkroppa kevyesti, 2 sarjaa per liike (leuanveto, penkki, soutu)','Keskivartalo: dead bug 2 × 10, sivulankku 2 × 20 s']))]};
+    return {ex:[['Kevyt kyykky','2 × 5','kevyt'],['Leuanveto','2 × 5','kevyt'],['Penkkipunnerrus','2 × 5','kevyt'],['Käsipainosoutu','2 × 8/puoli','kevyt']], intro:'Pidä keho virkeänä ilman väsymystä.', secs:[SEC('Ohjelma', ul(['Kevyt kyykky 2 × 5','Pogo-hypyt 2 × 10','Yläkroppa kevyesti, 2 sarjaa per liike (leuanveto, penkki, soutu)','Keskivartalo: dead bug 2 × 10, sivulankku 2 × 20 s']))]};
   }
   // Ylläpito / Voima (rakennuskausi)
   rows = [['Takakyykky tai trap bar -maastaveto','2–3 × 3–5','~85 %, RIR 2'],['Leuanveto','3 × 5–8','RIR 2'],['Askelnousu korkealle laatikolle','2 × 6/jalka','RIR 2'],['Penkkipunnerrus tai punnerrukset lisäpainolla','3 × 6–8','RIR 2'],['Pohjenosto','2 × 10','raskas'],['Face pull','2 × 12–15','kevyt']];
@@ -436,7 +464,7 @@ function strengthDetail(x,k,light){
   if (k >= '2029-04-30') extra.push(NORSE_STR);
   extra.push(SEC('Valinnainen yläkroppa (uinnin jälkeen, 20–25 min)', tbl([['Ylätalja','3 × 8'],['Yhden käden soutu','2 × 10/puoli'],['Suorin käsin taljaveto','2 × 12'],['Kuminauhalla ulkokierto','2 × 15/puoli'],['Lankku + sivulankku','2 × 45 s / 2 × 30 s']],['Liike','Sarjat × toistot'])));
   extra.push(SEC('Kisojen ympärillä', ul(['Viimeinen raskas jalkatreeni 10–14 päivää ennen A-kisaa: 2 × 3 @ 80 %','Kisaviikolla vain 15 min aktivointi','Kisan jälkeen 5–7 päivää ilman raskasta voimaa'])));
-  return {intro:'Koko kehon ylläpito, 40–45 min, laatuharjoituksen jälkeen illalla.', secs:[STR_WARMUP, SEC('Ohjelma', tbl(rows,['Liike','Sarjat × toistot','Kuorma'])), ...extra, lightTxt, STR_RULES]};
+  return {ex:rows, intro:'Koko kehon ylläpito, 40–45 min, laatuharjoituksen jälkeen illalla.', secs:[STR_WARMUP, SEC('Ohjelma', tbl(rows,['Liike','Sarjat × toistot','Kuorma'])), ...extra, lightTxt, STR_RULES, STR_GLOSS]};
 }
 
 function cadenceTip(k){
@@ -560,7 +588,7 @@ const LS = 'norseman-diary-cache-v1';
 const configured = !SUPABASE_URL.startsWith('LIITÄ') && !SUPABASE_KEY.startsWith('LIITÄ');
 function lsLoad(){ try { return JSON.parse(localStorage.getItem(LS)||'[]'); } catch(e){ return []; } }
 function lsSave(){ try { localStorage.setItem(LS, JSON.stringify(entries)); } catch(e){} }
-const fromRow = r => ({id:r.id, date:r.date, sport:r.sport, dur:r.dur, dist:r.dist==null?null:+r.dist, hr:r.hr, rpe:r.rpe, title:r.title||'', note:r.note||'', ts:Date.parse(r.created_at)||0});
+const fromRow = r => ({id:r.id, date:r.date, sport:r.sport, dur:r.dur, dist:r.dist==null?null:+r.dist, hr:r.hr, rpe:r.rpe, title:r.title||'', note:r.note||'', ts:Date.parse(r.created_at)||0, sets:r.sets||null});
 
 async function loadEntries(){
   if (!sb || !session) return;
@@ -600,7 +628,15 @@ function setSync(){
 async function addEntry(e){
   const id = 'e'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
   const row = {id, date:e.date, sport:e.sport, dur:e.dur, dist:e.dist, hr:e.hr, rpe:e.rpe, title:e.title, note:e.note};
-  const {error} = await sb.from('entries').insert(row);
+  if (e.sets) row.sets = e.sets;
+  let {error} = await sb.from('entries').insert(row);
+  if (error && row.sets && /sets/.test(error.message||'')){
+    // Tietokannasta puuttuu sets-sarake: tallenna painot muistiinpanoon, ettei mitään katoa.
+    const txt = row.sets.map(x => `${x.ex}: ${setsTxt(x.sets)}`).join('; ');
+    delete row.sets; row.note = [row.note, txt].filter(Boolean).join(' | ');
+    ({error} = await sb.from('entries').insert(row));
+    if (!error) toast('Painot tallentuivat muistiinpanoon. Aja päivitys-SQL Supabasessa.');
+  }
   if (error){ toast('Tallennus epäonnistui. Tarkista yhteys ja yritä uudelleen.'); return false; }
   entries.push({...row, ts:Date.now()}); lsSave();
   return true;
@@ -621,7 +657,7 @@ async function importBackup(file){
     const json = JSON.parse(await file.text());
     const list = (json.entries||[]).filter(e => e && e.id && e.date && e.sport);
     if (!list.length){ toast('Tiedostossa ei ollut merkintöjä.'); return; }
-    const rows = list.map(e => ({id:e.id, date:e.date, sport:e.sport, dur:+e.dur||0, dist:e.dist??null, hr:e.hr??null, rpe:e.rpe??null, title:e.title||'', note:e.note||''}));
+    const rows = list.map(e => ({id:e.id, date:e.date, sport:e.sport, dur:+e.dur||0, dist:e.dist??null, hr:e.hr??null, rpe:e.rpe??null, title:e.title||'', note:e.note||'', ...(e.sets?{sets:e.sets}:{})}));
     const {error} = await sb.from('entries').upsert(rows, {onConflict:'id'});
     if (error){ toast('Palautus epäonnistui.'); return; }
     toast(`Palautettu ${rows.length} merkintää`); loadEntries();
@@ -741,7 +777,7 @@ function renderToday(){
   </div>
   ${p.ph && p.ph.goal ? `<div class="note"><b>Jakson tavoite:</b> ${esc(p.ph.goal)}${wk?` · juoksua tällä viikolla noin ${wk} km`:''}${p.light?'<br>Kevyt viikko: volyymi noin −25 %, ei kovia harjoituksia. Hyvä aika testeille.':''}${p.ph.general?'<br><span class="muted small">Tämän kauden viikkopohja on suunnitelman esimerkkiviikosta.</span>':''}</div>`:''}
   ${race && toRace>0 && toRace<=60 ? `<div class="note"><b>${esc(race.n)}</b> ${toRace} päivän päästä (${fmtY(race.d)}). ${esc(race.z)}</div>`:''}
-  ${logged.length ? `<section class="logged"><h2>Tänään kirjattu</h2><ul>${logged.map(e=>`<li><b>${SPORT[e.sport]?.n||e.sport}</b> ${hm(+e.dur||0)}${e.dist?` · ${e.dist} km`:''}${paceStr(e)?` · ${paceStr(e)}`:''}${e.rpe?` · RPE ${e.rpe}`:''}</li>`).join('')}</ul></section>`:''}
+  ${logged.length ? `<section class="logged"><h2>Tänään kirjattu</h2><ul>${logged.map(e=>`<li><b>${SPORT[e.sport]?.n||e.sport}</b> ${hm(+e.dur||0)}${e.dist?` · ${e.dist} km`:''}${paceStr(e)?` · ${paceStr(e)}`:''}${e.rpe?` · RPE ${e.rpe}`:''}${setsSummary(e)}</li>`).join('')}</ul></section>`:''}
   `;
   $view.querySelectorAll('[data-do]').forEach(b => b.onclick = () => { const [dk,i] = b.dataset.do.split('|'); startLog(dk,+i); });
   bindOpen();
@@ -749,7 +785,10 @@ function renderToday(){
 
 function startLog(dk,i){
   const x = planFor(dk).items[i];
-  prefill = {date: dk < todayKey() || dk===todayKey() ? dk : todayKey(), sport:x.s==='race'?'run':x.s, dur:x.d||'', dist:x.k||'', title:x.t};
+  const p = planFor(dk);
+  let ex = null;
+  if (x.s==='str'){ const d = detailFor(x,dk,p.light); if (d.ex) ex = d.ex.map(r => ({name:r[0], rx:r[1], load:r[2]||'', n: p.light ? 2 : setCount(r[1])})); }
+  prefill = {date: dk < todayKey() || dk===todayKey() ? dk : todayKey(), sport:x.s==='race'?'run':x.s, dur:x.d||'', dist:x.k||'', title:x.t, ex};
   const dlg = document.getElementById('dlg'); if (dlg.open) dlg.close();
   go('log');
 }
@@ -799,6 +838,37 @@ function renderWeek(){
   const n = document.getElementById('now'); if (n) n.onclick = () => { weekOff=0; render(); };
 }
 
+function setCount(rx){ const m = String(rx).match(/^(\d+)(?:–(\d+))?\s*×/); return m ? +(m[2]||m[1]) : 3; }
+const exKey = n => n.replace(/\s*\(.*?\)\s*/g,'').replace(/,.*$/,'').trim().toLowerCase();
+function lastSets(name, before){
+  const k = exKey(name);
+  const list = entries.filter(e => Array.isArray(e.sets) && e.date < before).sort((a,b)=> a.date<b.date?1:-1);
+  for (const e of list){ const x = e.sets.find(s => exKey(s.ex)===k && s.sets.some(t=>t.kg||t.reps)); if (x) return {date:e.date, sets:x.sets}; }
+  return null;
+}
+const setsTxt = arr => arr.filter(t=>t.kg||t.reps).map(t => t.kg ? `${t.kg}×${t.reps||'?'}` : `${t.reps}`).join(', ');
+function setsSummary(e){
+  if (!Array.isArray(e.sets) || !e.sets.length) return '';
+  return `<div class="setsum">${e.sets.map(x=>`<div><span>${esc(x.ex)}</span> ${esc(setsTxt(x.sets))}</div>`).join('')}</div>`;
+}
+function exBlock(ex, i, date){
+  const last = ex.name ? lastSets(ex.name, date) : null;
+  const rows = Array.from({length:ex.n||3}, (_,j) => setRow(i,j));
+  return `<fieldset class="ex" data-ex="${i}">
+    <legend>${ex.name ? esc(ex.name) : `<input class="exname" placeholder="Liikkeen nimi" aria-label="Liikkeen nimi">`}</legend>
+    ${ex.rx ? `<div class="rx">Ohjelma: ${esc(ex.rx)}${ex.load?` · ${esc(ex.load)}`:''}</div>`:''}
+    ${last ? `<div class="last">Viimeksi ${fmt(last.date)}: ${esc(setsTxt(last.sets))}</div>`:''}
+    <div class="setrows">${rows.join('')}</div>
+    <button type="button" class="addset" data-addset="${i}">+ sarja</button>
+  </fieldset>`;
+}
+function setRow(i,j){
+  return `<div class="setrow"><span class="sn">${j+1}.</span>
+    <input type="number" inputmode="decimal" step="0.5" min="0" placeholder="kg" aria-label="Sarja ${j+1} paino (kg)" data-kg>
+    <span class="x">×</span>
+    <input type="number" inputmode="numeric" min="0" placeholder="toistot" aria-label="Sarja ${j+1} toistot" data-reps></div>`;
+}
+
 function renderLog(){
   const f = prefill || {date:todayKey(), sport:'run', dur:'', dist:'', title:''};
   prefill = null;
@@ -817,13 +887,44 @@ function renderLog(){
       <label>Keskisyke<input type="number" name="hr" inputmode="numeric" min="40" max="220"></label>
     </div>
     <div class="calc" id="calc" aria-live="polite"></div>
+    <section id="strbox" hidden>
+      <h3 class="cond" style="font-size:1.3rem;margin:4px 0 2px">Painot</h3>
+      <p class="muted small" style="margin:0 0 6px">Kirjaa työsarjat. Kun syötät ensimmäisen sarjan painon, sama paino täyttyy muihin sarjoihin, koska työsarjat tehdään samalla painolla.</p>
+      <details class="gloss"><summary>Mitä merkinnät tarkoittavat?</summary>${WEIGHT_RULE}${STR_GLOSSARY}</details>
+      <div id="exlist"></div>
+      <button type="button" class="btn" id="addex">+ Lisää liike</button>
+    </section>
     <div><label style="margin-bottom:6px">Rasitus (RPE 1–10)</label>
       <div class="rpe" role="group" aria-label="Rasitus">${[1,2,3,4,5,6,7,8,9,10].map(n=>`<button type="button" data-r="${n}" aria-pressed="false">${n}</button>`).join('')}</div></div>
     <label>Muistiinpano<textarea name="note" placeholder="Miltä tuntui, kadenssi, sää…"></textarea></label>
     <button class="btn primary" type="submit">Tallenna suoritus</button>
   </form>`;
   const form = document.getElementById('f');
+  let exs = (f.ex && f.ex.length) ? f.ex : [{name:'', n:3}];
+  const exlist = document.getElementById('exlist');
+  const drawEx = () => { exlist.innerHTML = exs.map((x,i)=>exBlock(x,i,form.date.value||todayKey())).join(''); };
+  drawEx();
+  document.getElementById('addex').onclick = () => { collectEx(); exs.push({name:'', n:3}); drawEx(); restoreEx(); };
+  let snap = null;
+  function collectEx(){ snap = [...exlist.querySelectorAll('fieldset.ex')].map(fs => ({name: fs.querySelector('.exname')?.value, rows:[...fs.querySelectorAll('.setrow')].map(r => [r.querySelector('[data-kg]').value, r.querySelector('[data-reps]').value])})); }
+  function restoreEx(){ if (!snap) return; [...exlist.querySelectorAll('fieldset.ex')].forEach((fs,i) => { const sn = snap[i]; if (!sn) return; const nm = fs.querySelector('.exname'); if (nm && sn.name) nm.value = sn.name;
+      const rows = fs.querySelectorAll('.setrow'); sn.rows.forEach((v,j) => { if (!rows[j]) return; rows[j].querySelector('[data-kg]').value = v[0]; rows[j].querySelector('[data-reps]').value = v[1]; }); }); }
+  exlist.addEventListener('click', e => { const b = e.target.closest('[data-addset]'); if (!b) return;
+    const box = b.previousElementSibling, n = box.children.length; box.insertAdjacentHTML('beforeend', setRow(+b.dataset.addset, n));
+    const prevKg = box.children[n-1]?.querySelector('[data-kg]').value; if (prevKg) box.children[n].querySelector('[data-kg]').value = prevKg; });
+  exlist.addEventListener('input', e => {
+    if (!e.target.matches('[data-kg]')) return;
+    const rows = [...e.target.closest('.setrows').querySelectorAll('[data-kg]')];
+    const idx = rows.indexOf(e.target);
+    rows.slice(idx+1).forEach(r => { if (!r.value || r.dataset.auto==='1'){ r.value = e.target.value; r.dataset.auto='1'; } });
+    e.target.dataset.auto = '0';
+  });
+  const readSets = () => [...exlist.querySelectorAll('fieldset.ex')].map((fs,i) => ({
+    ex: (fs.querySelector('.exname') ? fs.querySelector('.exname').value.trim() : exs[i].name),
+    sets: [...fs.querySelectorAll('.setrow')].map(r => ({kg: +r.querySelector('[data-kg]').value || null, reps: +r.querySelector('[data-reps]').value || null})).filter(t => t.kg || t.reps)
+  })).filter(x => x.ex && x.sets.length);
   const upd = () => {
+    document.getElementById('strbox').hidden = sport!=='str';
     const dur = +form.dur.value, dist = +form.dist.value;
     document.getElementById('distL').style.visibility = (sport==='str'||sport==='free') ? 'hidden' : 'visible';
     const e = {sport, dur, dist};
@@ -840,6 +941,7 @@ function renderLog(){
     const dur = +form.dur.value;
     if (!form.date.value || !dur){ toast('Lisää päivä ja kesto.'); return; }
     const e = {date:form.date.value, sport, dur, dist: (sport==='str'||sport==='free') ? null : (+form.dist.value||null), hr:+form.hr.value||null, rpe, title:f.title||'', note:form.note.value.trim()};
+    if (sport==='str'){ const st = readSets(); if (st.length) e.sets = st; }
     const btn = form.querySelector('[type=submit]'); btn.disabled = true;
     if (await addEntry(e)){ toast('Suoritus tallennettu'); go(e.date===todayKey()?'today':'week'); }
     btn.disabled = false;
@@ -864,12 +966,12 @@ function barChart({labels, series, h=150, fmtY=v=>v, line}){
   }
   return `<svg viewBox="0 0 ${w} ${h}" role="img">${g}</svg>`;
 }
-function lineChart({labels, v, h=140, c, fmtY}){
+function lineChart({labels, v, h=140, c, fmtY, up}){
   const w=380, padL=34, padB=20, ih=h-padB-8, iw=w-padL-10;
   const vals = v.filter(x=>x!=null);
-  if (vals.length<2) return '<p class="muted small" style="margin:8px 2px 12px">Kirjaa ainakin kahden viikon juoksut matkoineen, niin trendi näkyy.</p>';
+  if (vals.length<2) return '<p class="muted small" style="margin:8px 2px 12px">Tarvitaan vähintään kaksi kirjausta, niin trendi näkyy.</p>';
   const mn = Math.min(...vals)-0.2, mx = Math.max(...vals)+0.2, n=labels.length;
-  const X = i => padL + iw*i/(n-1), Y = val => 8 + ih*(val-mn)/(mx-mn); // nopeampi = ylempänä
+  const X = i => padL + iw*i/(n-1), Y = val => up ? 8 + ih*(1-(val-mn)/(mx-mn)) : 8 + ih*(val-mn)/(mx-mn); // juoksu: nopeampi = ylempänä
   let g='';
   [mn+0.2,(mn+mx)/2,mx-0.2].forEach(t=>{ g+=`<line x1="${padL}" x2="${w-10}" y1="${Y(t)}" y2="${Y(t)}" stroke="var(--line)"/><text x="${padL-6}" y="${Y(t)+3}" text-anchor="end">${fmtY(t)}</text>`; });
   let d=''; v.forEach((val,i)=>{ if(val==null) return; d+=(d?'L':'M')+X(i).toFixed(1)+' '+Y(val).toFixed(1); });
@@ -879,6 +981,25 @@ function lineChart({labels, v, h=140, c, fmtY}){
   return `<svg viewBox="0 0 ${w} ${h}" role="img">${g}</svg>`;
 }
 
+let strEx = null;
+function strengthLog(){
+  const map = {};
+  entries.filter(e=>Array.isArray(e.sets)).sort((a,b)=>a.date<b.date?-1:1).forEach(e => e.sets.forEach(x => {
+    const k = exKey(x.ex); const best = Math.max(0, ...x.sets.map(t=>+t.kg||0)); if (!best) return;
+    (map[k] = map[k] || {name:x.ex.replace(/\s*\(.*?\)/g,''), pts:[]}).pts.push({d:e.date, kg:best});
+  }));
+  return map;
+}
+function strengthChartHtml(){
+  const map = strengthLog(), keys = Object.keys(map);
+  if (!keys.length) return '';
+  if (!strEx || !map[strEx]) strEx = keys.sort((a,b)=>map[b].pts.length-map[a].pts.length)[0];
+  const pts = map[strEx].pts.slice(-16);
+  return `<div class="chart"><h3>Voimaliikkeiden kehitys</h3>
+    <label class="small" style="margin:6px 2px 8px">Liike<select id="strsel">${keys.map(k=>`<option value="${esc(k)}" ${k===strEx?'selected':''}>${esc(map[k].name)}</option>`).join('')}</select></label>
+    <div class="legend"><span style="--c:var(--str)">Kerran raskain työsarja (kg)</span></div>
+    ${lineChart({labels:pts.map(p=>fmt(p.d)), v:pts.map(p=>p.kg), c:'var(--str)', fmtY:v=>Math.round(v)+'', up:true})}</div>`;
+}
 function renderProgress(){
   const mon0 = monday(todayKey());
   const weeks = []; for (let i=11;i>=0;i--) weeks.push(addDays(mon0,-7*i));
@@ -918,9 +1039,11 @@ function renderProgress(){
     <div class="legend"><span style="--c:var(--str)">Kesto × RPE viikossa</span></div>
     ${barChart({labels, series:[{v:ws.map(s=>s.load),c:'var(--str)'}], fmtY:v=>v})}
   </div>
+  ${strengthChartHtml()}
   <h2>Kaikki suoritukset</h2>
-  ${all.length ? `<ul class="hist">${all.slice(0,60).map(e=>`<li><div><b>${fmtY(e.date)}</b> ${SPORT[e.sport]?.n||''} · ${hm(+e.dur||0)}${e.dist?` · ${e.dist} km`:''}${paceStr(e)?` · ${paceStr(e)}`:''}${e.hr?` · ♥ ${e.hr}`:''}${e.rpe?` · RPE ${e.rpe}`:''}${e.note?`<div class="muted small">${esc(e.note)}</div>`:''}</div><button class="del" data-del="${e.id}">Poista</button></li>`).join('')}</ul>` : '<p class="muted">Ei vielä suorituksia.</p>'}
+  ${all.length ? `<ul class="hist">${all.slice(0,60).map(e=>`<li><div><b>${fmtY(e.date)}</b> ${SPORT[e.sport]?.n||''} · ${hm(+e.dur||0)}${e.dist?` · ${e.dist} km`:''}${paceStr(e)?` · ${paceStr(e)}`:''}${e.hr?` · ♥ ${e.hr}`:''}${e.rpe?` · RPE ${e.rpe}`:''}${setsSummary(e)}${e.note?`<div class="muted small">${esc(e.note)}</div>`:''}</div><button class="del" data-del="${e.id}">Poista</button></li>`).join('')}</ul>` : '<p class="muted">Ei vielä suorituksia.</p>'}
   `;
+  const ss = document.getElementById('strsel'); if (ss) ss.onchange = () => { strEx = ss.value; _render(); };
   $view.querySelectorAll('[data-del]').forEach(b => b.onclick = () => { if (confirm('Poistetaanko suoritus?')) removeEntry(b.dataset.del); });
   $view.insertAdjacentHTML('beforeend', `<h2>Varmuuskopio ja tili</h2>
     <p class="muted small">Tallenna varmuuskopio esimerkiksi kerran kuukaudessa.</p>

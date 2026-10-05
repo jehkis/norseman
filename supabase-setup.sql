@@ -11,6 +11,7 @@ create table if not exists public.entries (
   rpe         integer check (rpe between 1 and 10),
   title       text,
   note        text,
+  sets        jsonb,
   created_at  timestamptz not null default now()
 );
 
