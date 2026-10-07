@@ -31,13 +31,13 @@ Every morning the app shows the day's workout from the plan. I log what I actual
 **Logging**
 - Log a session with one tap from the plan: sport, duration, distance, average heart rate and RPE.
 - The app calculates pace (min/km), speed (km/h), swim pace (/100 m) and session load (duration × RPE).
-- Strength sessions are logged set by set (weight × reps). For each exercise the app shows the previous result, an **estimated 1RM**, and today's target weight calculated from the plan's percentage.
+- Strength sessions are logged set by set (weight × reps). For each exercise the app shows the plan's prescription and the previous result.
 
 **Progress**
 - Weekly hours, planned vs. completed
 - Weekly running distance vs. target
 - Running pace trend and weekly training load
-- Strength progress per exercise (estimated 1RM or heaviest working set)
+- Strength progress per exercise (heaviest working set)
 - Plan adherence, totals per sport, full history and backup/restore (JSON)
 
 **Sync**
@@ -81,7 +81,7 @@ The app would only use the data of the athlete who has authorized it.
 ## Roadmap
 
 - [x] Daily plan and workout content
-- [x] Manual logging, strength sets and estimated 1RM
+- [x] Manual logging and strength sets
 - [x] Progress charts and cross-device sync
 - [ ] Garmin Activity API: automatic workout import
 - [ ] Garmin Training API: planned workouts to the watch
