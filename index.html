@@ -1103,9 +1103,19 @@ function renderToday(){
 }
 
 function startLog(dk,i){ startLogItem(planFor(dk).items[i], dk); }
+// Ohjelman voimatreenin liikkeet kirjauslomakkeelle; sarjamäärä edellisestä kerrasta, jos liike on tehty ennen.
+function planExs(x, date){
+  const d = detailFor(x, x.at, x.al);
+  return d.ex ? d.ex.map(r => { const prev = lastSets(r[0], date); return {name:r[0], rx:r[1], load:r[2]||'', n: prev ? prev.sets.length : x.al ? 2 : setCount(r[1])}; }) : null;
+}
+// Lähin ohjelman voimatreeni (sama päivä, sitten ±1–3 päivää), kun punttitreeni ei osu voimapäivälle.
+function nearestStr(date){
+  for (const o of [0,-1,1,-2,2,-3,3]){ const x = planFor(addDays(date,o)).items.find(x => x.s==='str'); if (x) return x; }
+  return null;
+}
 function startLogItem(x, dk, targetId){
   let ex = null;
-  if (x.s==='str'){ const d = detailFor(x,x.at,x.al); if (d.ex) ex = d.ex.map(r => ({name:r[0], rx:r[1], load:r[2]||'', n: x.al ? 2 : setCount(r[1])})); }
+  if (x.s==='str') ex = planExs(x, dk < todayKey() ? dk : todayKey());
   const date = dk < todayKey() || dk===todayKey() ? dk : todayKey(), sport = x.s==='race'?'run':x.s;
   prefill = {date, sport, dur:x.d||'', dist:x.k||'', title:x.t, ex, target:targetId || stravaTarget(date, sport)?.id || null};
   const dlg = document.getElementById('dlg'); if (dlg.open) dlg.close();
@@ -1216,20 +1226,23 @@ function setsSummary(e){
 }
 function exBlock(ex, i, date){
   const last = ex.name ? lastSets(ex.name, date) : null;
-  const rows = Array.from({length:ex.n||3}, (_,j) => setRow(i,j));
+  const rows = Array.from({length:ex.n||last?.sets.length||3}, (_,j) => setRow(i,j,last?.sets[j]));
   return `<fieldset class="ex" data-ex="${i}">
-    <legend>${ex.name ? esc(ex.name) : `<input class="exname" placeholder="Liikkeen nimi" aria-label="Liikkeen nimi">`}</legend>
+    <legend><input class="exname" value="${esc(ex.name||'')}" placeholder="Liikkeen nimi" aria-label="Liikkeen nimi"></legend>
+    <button type="button" class="addset" data-rmex="${i}" style="float:right;padding-top:0">Poista liike</button>
     ${ex.rx ? `<div class="rx">Ohjelma: ${esc(ex.rx)}${ex.load?` · ${esc(ex.load)}`:''}</div>`:''}
     ${last ? `<div class="last">Viimeksi ${fmt(last.date)}: ${esc(setsTxt(last.sets))}</div>`:''}
     <div class="setrows">${rows.join('')}</div>
     <button type="button" class="addset" data-addset="${i}">+ sarja</button>
   </fieldset>`;
 }
-function setRow(i,j){
+// v = edellisen kerran sarja: paino ja toistot valmiiksi; data-auto antaa ensimmäisen sarjan muutoksen päivittää muut.
+function setRow(i,j,v){
+  const kg = v?.kg ?? '', reps = v?.reps ?? '';
   return `<div class="setrow"><span class="sn">${j+1}.</span>
-    <input type="number" inputmode="decimal" step="0.5" min="0" placeholder="kg" aria-label="Sarja ${j+1} paino (kg)" data-kg>
+    <input type="number" inputmode="decimal" step="0.5" min="0" placeholder="kg" aria-label="Sarja ${j+1} paino (kg)" data-kg value="${kg}" ${kg!==''?'data-auto="1"':''}>
     <span class="x">×</span>
-    <input type="number" inputmode="numeric" min="0" placeholder="toistot" aria-label="Sarja ${j+1} toistot" data-reps></div>`;
+    <input type="number" inputmode="numeric" min="0" placeholder="toistot" aria-label="Sarja ${j+1} toistot" data-reps value="${reps}"></div>`;
 }
 
 // Keskeneräinen kirjaus säilyy, kun välilehteä vaihdetaan tai sovellus suljetaan.
@@ -1284,9 +1297,13 @@ function renderLog(){
   function collectEx(){ snap = [...exlist.querySelectorAll('fieldset.ex')].map(fs => ({name: fs.querySelector('.exname')?.value, rows:[...fs.querySelectorAll('.setrow')].map(r => [r.querySelector('[data-kg]').value, r.querySelector('[data-reps]').value])})); }
   function restoreEx(){ if (!snap) return; [...exlist.querySelectorAll('fieldset.ex')].forEach((fs,i) => { const sn = snap[i]; if (!sn) return; const nm = fs.querySelector('.exname'); if (nm && sn.name) nm.value = sn.name;
       const rows = fs.querySelectorAll('.setrow'); sn.rows.forEach((v,j) => { if (!rows[j]) return; rows[j].querySelector('[data-kg]').value = v[0]; rows[j].querySelector('[data-reps]').value = v[1]; }); }); }
+  exlist.addEventListener('click', e => { const rm = e.target.closest('[data-rmex]'); if (!rm) return;
+    collectEx(); const i = +rm.dataset.rmex; exs.splice(i,1); snap.splice(i,1);
+    if (!exs.length){ exs = [{name:'', n:3}]; snap = null; }
+    drawEx(); restoreEx(); });
   exlist.addEventListener('click', e => { const b = e.target.closest('[data-addset]'); if (!b) return;
     const box = b.previousElementSibling, n = box.children.length; box.insertAdjacentHTML('beforeend', setRow(+b.dataset.addset, n));
-    const prevKg = box.children[n-1]?.querySelector('[data-kg]').value; if (prevKg) box.children[n].querySelector('[data-kg]').value = prevKg; });
+    const prev = box.children[n-1]; if (prev){ box.children[n].querySelector('[data-kg]').value = prev.querySelector('[data-kg]').value; box.children[n].querySelector('[data-reps]').value = prev.querySelector('[data-reps]').value; } });
   exlist.addEventListener('input', e => {
     if (!e.target.matches('[data-kg]')) return;
     const rows = [...e.target.closest('.setrows').querySelectorAll('[data-kg]')];
@@ -1295,7 +1312,7 @@ function renderLog(){
     e.target.dataset.auto = '0';
   });
   const readSets = () => [...exlist.querySelectorAll('fieldset.ex')].map((fs,i) => ({
-    ex: (fs.querySelector('.exname') ? fs.querySelector('.exname').value.trim() : exs[i].name),
+    ex: fs.querySelector('.exname').value.trim() || exs[i].name,
     sets: [...fs.querySelectorAll('.setrow')].map(r => ({kg: +r.querySelector('[data-kg]').value || null, reps: +r.querySelector('[data-reps]').value || null})).filter(t => t.kg || t.reps)
   })).filter(x => x.ex && x.sets.length);
   const upd = () => {
@@ -1314,6 +1331,8 @@ function renderLog(){
     target = id;
     const e = entries.find(x => x.id===id);
     if (e){ form.dur.value = e.dur||form.dur.value; if (e.dist) form.dist.value = e.dist; if (e.hr) form.hr.value = e.hr; }
+    const blank = exs.length===1 && !exs[0].name && ![...exlist.querySelectorAll('[data-kg],[data-reps],.exname')].some(x => x.value);
+    if (e && sport==='str' && blank){ const x = nearestStr(e.date); const pe = x && planExs(x, e.date); if (pe){ exs = pe; snap = null; drawEx(); } }
     drawTarget(); upd();
   };
   const drawTarget = () => {
@@ -1462,8 +1481,8 @@ function renderProgress(){
   $view.querySelectorAll('[data-fill]').forEach(b => b.onclick = () => {
     const e = entries.find(x => x.id===b.dataset.fill); if (!e) return;
     draftClear();
-    // Voimatreeniin otetaan liikkeet saman päivän ohjelmasta, jos sellainen on
-    const x = e.sport==='str' && planFor(e.date).items.find(x => x.s==='str');
+    // Voimatreeniin otetaan liikkeet lähimmästä ohjelman voimatreenistä; liikkeet voi vaihtaa lomakkeella
+    const x = e.sport==='str' && nearestStr(e.date);
     if (x) return startLogItem(x, e.date, e.id);
     prefill = {date:e.date, sport:e.sport, dur:e.dur||'', dist:e.dist||'', title:'', target:e.id, ex:null};
     go('log');
