@@ -187,6 +187,16 @@ dialog::backdrop{background:rgba(10,20,25,.5)}
 .swl{display:flex;flex-direction:column;gap:6px;margin:6px 0 4px}
 .swl button{display:grid;grid-template-columns:10px 1fr auto;gap:10px;align-items:center;text-align:left;border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:8px 12px;min-height:48px}
 .swl button small{color:var(--muted)}
+.estats{display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:8px;margin:12px 0 4px}
+.estats div{background:var(--bg);border-radius:8px;padding:8px 10px}
+.estats b{font-family:"Barlow Condensed",sans-serif;font-size:1.45rem;line-height:1.1;display:block}
+.estats span{font-size:.78rem;color:var(--muted)}
+.sc{position:relative;margin:4px 0 2px}
+.sc svg{width:100%;height:auto;display:block;touch-action:pan-y}
+.sc svg text{fill:var(--muted);font-size:13px;font-family:Barlow,sans-serif}
+.sc .tip{position:absolute;top:0;transform:translateX(-50%);background:var(--ink);color:var(--bg);font-size:.78rem;padding:3px 8px;border-radius:6px;pointer-events:none;white-space:nowrap}
+.entry-open{background:none;border:none;padding:0;text-align:left;color:inherit;cursor:pointer;width:100%}
+.entry-open:hover b{text-decoration:underline}
 @media (prefers-reduced-motion:reduce){.toast{transition:none}}
 </style>
 </head>
@@ -686,7 +696,7 @@ function lsLoadMoves(){ try { return JSON.parse(localStorage.getItem(LSM)||'[]')
 function lsSaveMoves(){ try { localStorage.setItem(LSM, JSON.stringify(moves)); } catch(e){} }
 function lsLoadSettings(){ try { return mergeSettings(JSON.parse(localStorage.getItem(LSS)||'null')); } catch(e){ return mergeSettings(null); } }
 function lsSaveSettings(){ try { localStorage.setItem(LSS, JSON.stringify(settings)); } catch(e){} }
-const fromRow = r => ({id:r.id, date:r.date, sport:r.sport, dur:r.dur, dist:r.dist==null?null:+r.dist, hr:r.hr, rpe:r.rpe, title:r.title||'', note:r.note||'', ts:Date.parse(r.created_at)||0, sets:r.sets||null});
+const fromRow = r => ({id:r.id, date:r.date, sport:r.sport, dur:r.dur, dist:r.dist==null?null:+r.dist, hr:r.hr, rpe:r.rpe, title:r.title||'', note:r.note||'', ts:Date.parse(r.created_at)||0, sets:r.sets||null, details:r.details||null});
 
 async function loadEntries(){
   if (!sb || !session) return;
@@ -777,9 +787,21 @@ async function stravaSync(force, quiet){
   const res = await stravaCall('sync');
   strava = res;
   if (res.added || res.merged){ toast(`Stravasta ${res.added} uutta suoritusta${res.merged?`, ${res.merged} täydennetty`:''}`); await loadEntries(); }
+  else if (res.detailed) await loadEntries();
+  if (res.connected) stravaBackfill();
   else if (force && !quiet && res.connected) toast('Strava on ajan tasalla');
   else if (force && !quiet && res.error) toast(res.error);
   if (tab==='progress') _render();
+}
+// Kilometriajat ja käyrät jo tuoduille tai käsin kirjatuille kestävyyssuorituksille, korkeintaan kerran tunnissa.
+const DETAIL_SPORTS = ['run','bike','swim','erg'];
+async function stravaBackfill(){
+  const missing = entries.some(e => e.date >= '2026-10-05' && DETAIL_SPORTS.includes(e.sport) && !e.details);
+  if (!missing) return;
+  const KEY = 'norseman-strava-backfill';
+  try { if (Date.now() - (+localStorage.getItem(KEY)||0) < 60*60e3) return; localStorage.setItem(KEY, String(Date.now())); } catch(e){}
+  const res = await stravaCall('backfill');
+  if (res.detailed){ toast(`Stravasta tarkat tiedot ${res.detailed} suoritukseen`); await loadEntries(); }
 }
 async function stravaConnect(){
   const res = await stravaCall('start');
@@ -951,6 +973,126 @@ function workoutCard(x,k,i,doneSports){
   </div>`;
 }
 
+/* ---------- Suoritusnäkymä (Stravan tarkat tiedot) ---------- */
+const mmss = sec => { sec = Math.round(sec); const h = Math.floor(sec/3600), m = Math.floor(sec%3600/60), s = sec%60; return h ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`; };
+// Vauhti nopeudesta (m/s) lajin mukaan; null, kun ollaan pysähdyksissä.
+function paceOf(sport, v){
+  if (!v || v < 0.3) return null;
+  if (sport==='bike') return v*3.6;               // km/h
+  if (sport==='swim') return 100/v;               // s / 100 m
+  if (sport==='erg') return 500/v;                // s / 500 m
+  return 1000/v;                                  // s / km
+}
+const paceFmt = (sport, x) => x==null ? '–' : sport==='bike' ? `${x.toFixed(1)} km/h` : `${mmss(x)} ${sport==='swim'?'/100 m':sport==='erg'?'/500 m':'/km'}`;
+const paceLabel = sport => sport==='bike' ? 'Nopeus' : 'Vauhti';
+const SC = {};   // käyrien data hoveria varten
+function streamChart(id, xs, ys, {c, fmt, axis=fmt, invert, h=170}){
+  const pts = xs.map((x,i) => [x, ys[i]]).filter(p => p[0]!=null && p[1]!=null);
+  if (pts.length < 2) return '';
+  const w=600, padL=44, padB=20, top=10, ih=h-padB-top, iw=w-padL-8;
+  const vals = pts.map(p=>p[1]).sort((a,b)=>a-b);
+  // 2.–98. persentiili, jotta yksittäiset piikit eivät litistä käyrää
+  let mn = vals[Math.floor(vals.length*0.02)], mx = vals[Math.ceil(vals.length*0.98)-1];
+  if (mx-mn < 1e-6){ mn -= 1; mx += 1; }
+  const x0 = pts[0][0], x1 = pts[pts.length-1][0];
+  const X = x => padL + iw*(x-x0)/((x1-x0)||1);
+  const Y = v => { const t = Math.max(0, Math.min(1, (v-mn)/(mx-mn))); return top + ih*(invert ? t : 1-t); };
+  let g = '';
+  [mn, (mn+mx)/2, mx].forEach(t => { g += `<line x1="${padL}" x2="${w-8}" y1="${Y(t).toFixed(1)}" y2="${Y(t).toFixed(1)}" stroke="var(--line)" stroke-width="1"/><text x="${padL-6}" y="${(Y(t)+4).toFixed(1)}" text-anchor="end">${axis(t)}</text>`; });
+  const km = (x1-x0)/1000, step = km > 60 ? 20 : km > 25 ? 10 : km > 10 ? 2 : km > 3 ? 1 : 0.5;
+  for (let k = Math.ceil(x0/1000/step)*step; k <= x1/1000; k += step) g += `<text x="${X(k*1000).toFixed(1)}" y="${h-4}" text-anchor="middle">${+k.toFixed(1)}</text>`;
+  const line = pts.map((p,i) => `${i?'L':'M'}${X(p[0]).toFixed(1)} ${Y(p[1]).toFixed(1)}`).join('');
+  g += `<path d="${line}L${X(x1).toFixed(1)} ${top+ih}L${X(x0).toFixed(1)} ${top+ih}Z" fill="${c}" opacity=".12"/>`;
+  g += `<path d="${line}" fill="none" stroke="${c}" stroke-width="2" stroke-linejoin="round"/>`;
+  g += `<line class="cross" x1="0" x2="0" y1="${top}" y2="${top+ih}" stroke="var(--ink)" stroke-width="1" visibility="hidden"/><circle class="dotp" r="4" fill="${c}" stroke="var(--surface)" stroke-width="2" visibility="hidden"/>`;
+  SC[id] = {pts, X, Y, fmt, w};
+  return `<div class="sc" data-sc="${id}"><svg viewBox="0 0 ${w} ${h}" role="img" aria-label="${id}">${g}</svg><div class="tip" hidden></div></div>`;
+}
+function bindStreamCharts(root){
+  root.querySelectorAll('[data-sc]').forEach(el => {
+    const d = SC[el.dataset.sc], svg = el.querySelector('svg'), tip = el.querySelector('.tip'), cross = svg.querySelector('.cross'), dot = svg.querySelector('.dotp');
+    const move = ev => {
+      const r = svg.getBoundingClientRect(), sx = (ev.clientX - r.left) * d.w / r.width;
+      let best = d.pts[0], bd = Infinity;
+      for (const p of d.pts){ const dd = Math.abs(d.X(p[0]) - sx); if (dd < bd){ bd = dd; best = p; } }
+      const px = d.X(best[0]), py = d.Y(best[1]);
+      cross.setAttribute('x1', px); cross.setAttribute('x2', px); cross.setAttribute('visibility','visible');
+      dot.setAttribute('cx', px); dot.setAttribute('cy', py); dot.setAttribute('visibility','visible');
+      tip.hidden = false; tip.textContent = `${(best[0]/1000).toFixed(2)} km · ${d.fmt(best[1])}`;
+      tip.style.left = `${Math.max(50, Math.min(r.width-50, px * r.width / d.w))}px`;
+    };
+    const leave = () => { tip.hidden = true; cross.setAttribute('visibility','hidden'); dot.setAttribute('visibility','hidden'); };
+    svg.addEventListener('pointermove', move); svg.addEventListener('pointerdown', move); svg.addEventListener('pointerleave', leave);
+  });
+}
+// Väliajat: juoksu ja soutu kilometreittäin, pyöräily 5 km:n pätkinä, uinti kierroksittain.
+function splitRows(e){
+  const D = e.details, sp = e.sport;
+  if (sp==='swim' || (sp==='erg' && D.laps?.length > 1)){
+    return {head:['Kierros','Matka','Aika',paceLabel(sp),'Syke'], rows:(D.laps||[]).filter(l => l.d > 0).map((l,i) => [i+1, `${Math.round(l.d)} m`, mmss(l.t), paceFmt(sp, paceOf(sp, l.d/l.t)), l.hr ? Math.round(l.hr) : '–'])};
+  }
+  let sp_ = D.splits || [];
+  if (sp==='bike'){
+    const g = [];
+    sp_.forEach((x,i) => { const k = Math.floor(i/5); g[k] = g[k] || {d:0, t:0, hrT:0, hrN:0, el:0}; g[k].d += x.d; g[k].t += x.t; if (x.hr){ g[k].hrT += x.hr*x.t; g[k].hrN += x.t; } g[k].el += x.el||0; });
+    let acc = 0;
+    return {head:['Km','Aika',paceLabel(sp),'Syke','Nousu'], rows:g.map(x => { acc += x.d; return [`${Math.round((acc-x.d)/1000)}–${(acc/1000).toFixed(acc%1000>50?1:0)}`, mmss(x.t), paceFmt(sp, paceOf(sp, x.d/x.t)), x.hrN ? Math.round(x.hrT/x.hrN) : '–', `${x.el>0?'+':''}${Math.round(x.el)} m`]; })};
+  }
+  let acc = 0;
+  return {head:['Km',paceLabel(sp),'Syke','Nousu'], rows:sp_.map(x => { acc += x.d; const km = x.d < 950 ? (acc/1000).toFixed(2) : Math.round(acc/1000); return [km, paceFmt(sp, paceOf(sp, x.d/x.t)), x.hr ? Math.round(x.hr) : '–', `${(x.el||0)>0?'+':''}${Math.round(x.el||0)} m`]; })};
+}
+function openEntry(id){
+  const e = entries.find(x => x.id===id); if (!e) return;
+  const D = e.details, sp = SPORT[e.sport] || {n:e.sport, c:'var(--muted)'}, body = document.getElementById('dlgBody');
+  const stat = (v, l) => v!=null && v!=='' ? `<div><b>${v}</b><span>${l}</span></div>` : '';
+  const dist = D?.dist ? D.dist/1000 : e.dist;
+  let stats = stat(dist ? `${(+dist).toFixed(2)} km` : null, 'matka')
+    + stat(D?.moving ? mmss(D.moving) : hm(+e.dur||0), D?.moving ? 'liikkeellä' : 'kesto')
+    + stat(D?.avgV ? paceFmt(e.sport, paceOf(e.sport, D.avgV)) : paceStr(e) || null, paceLabel(e.sport).toLowerCase())
+    + stat(D?.avgHr ? Math.round(D.avgHr) : e.hr, 'keskisyke')
+    + stat(D?.maxHr ? Math.round(D.maxHr) : null, 'maksimisyke')
+    + stat(D?.elev ? `${Math.round(D.elev)} m` : null, 'nousua')
+    + stat(D?.cad ? Math.round(e.sport==='run' ? D.cad*2 : D.cad) : null, e.sport==='run' ? 'askelta/min' : e.sport==='bike' ? 'kadenssi rpm' : 'kadenssi')
+    + stat(D?.watts ? `${Math.round(D.watts)} W` : null, 'teho')
+    + stat(e.rpe, 'RPE');
+  let charts = '';
+  if (D?.s?.d){
+    const s = D.s;
+    const unit = e.sport==='bike' ? 'km/h' : e.sport==='swim' ? 'min/100 m' : e.sport==='erg' ? 'min/500 m' : 'min/km';
+    const h3 = (t, u) => `<h3>${t} <span class="muted small" style="font-family:Barlow,sans-serif;font-weight:400">${u} · matka km</span></h3>`;
+    if (s.hr) charts += h3('Syke', 'bpm') + streamChart('Syke', s.d, s.hr, {c:'var(--run)', fmt:v => `♥ ${Math.round(v)}`, axis:v => `${Math.round(v)}`});
+    if (s.v){ const pv = s.v.map(v => paceOf(e.sport, v)); charts += h3(paceLabel(e.sport), unit) + streamChart(paceLabel(e.sport), s.d, pv, {c:'var(--fjord)', fmt:v => paceFmt(e.sport, v), axis:v => e.sport==='bike' ? v.toFixed(0) : mmss(v), invert:e.sport!=='bike'}); }
+    if (s.alt && (e.sport==='run' || e.sport==='bike') && D.elev > 5) charts += h3('Korkeus', 'm') + streamChart('Korkeus', s.d, s.alt, {c:'var(--bike)', fmt:v => `${Math.round(v)} m`, axis:v => `${Math.round(v)}`, h:120});
+  }
+  const sr = D ? splitRows(e) : null;
+  body.innerHTML = `<div class="top"><div><div class="sport" style="color:${sp.c};font-weight:600;font-size:.85rem">${sp.n} · ${DNL[wd(e.date)]} ${fmtY(e.date)}${isStrava(e)||D?.src==='strava' ? ' · Strava' : ''}</div>
+    <h2 id="dlgT">${esc(e.title || sp.n)}</h2></div><button class="btn" id="dlgX" aria-label="Sulje">✕</button></div>
+    <div class="estats">${stats}</div>
+    ${charts}
+    ${sr && sr.rows.length > 1 ? `<h3>Väliajat</h3>${tbl(sr.rows, sr.head)}` : ''}
+    ${!D && DETAIL_SPORTS.includes(e.sport) ? '<p class="muted small">Tarkkoja tietoja (kilometriajat, sykekäyrä) ei ole. Ne tulevat Stravasta, kun suoritus on siellä ja Strava on yhdistetty.</p>' : ''}
+    ${setsSummary(e)}
+    ${e.note ? `<h3>Muistiinpano</h3><p>${esc(e.note)}</p>` : ''}
+    <div class="acts">${isStrava(e) ? `<button class="btn primary" id="dlgFill">${e.sport==='str'&&!(Array.isArray(e.sets)&&e.sets.length)?'Lisää sarjat':'Täydennä'}</button>` : ''}<button class="btn" id="dlgC">Sulje</button></div>`;
+  const dlg = document.getElementById('dlg');
+  document.getElementById('dlgX').onclick = document.getElementById('dlgC').onclick = () => dlg.close();
+  const fb = document.getElementById('dlgFill'); if (fb) fb.onclick = () => { dlg.close(); fillEntry(e.id); };
+  bindStreamCharts(body);
+  if (!dlg.open) dlg.showModal();
+  body.scrollTop = 0; dlg.scrollTop = 0;
+}
+// Stravasta tuodun suorituksen täydennys kirjauslomakkeella
+function fillEntry(id){
+  const e = entries.find(x => x.id===id); if (!e) return;
+  draftClear();
+  // Voimatreeniin otetaan liikkeet lähimmästä ohjelman voimatreenistä; liikkeet voi vaihtaa lomakkeella
+  const x = e.sport==='str' && nearestStr(e.date);
+  if (x) return startLogItem(x, e.date, e.id);
+  prefill = {date:e.date, sport:e.sport, dur:e.dur||'', dist:e.dist||'', title:'', target:e.id, ex:null};
+  go('log');
+}
+const bindEntries = root => root.querySelectorAll('[data-entry]').forEach(b => b.onclick = () => openEntry(b.dataset.entry));
+
 /* ---------- Hybridi-tila ---------- */
 const modeSeg = () => `<div class="seg" role="group" aria-label="Tila">${[['norseman','Norseman'],['hybrid','Hybridi']].map(([m,n]) => `<button type="button" data-mode="${m}" aria-pressed="${settings.mode===m}">${n}</button>`).join('')}</div>`;
 function bindMode(){
@@ -1057,8 +1199,8 @@ function renderHybridToday(){
     ${hybGoalHtml(mon, true)}
     ${order.map(c => { const ws = all.filter(w => w.cat===c); return ws.length ? `<div class="libh"><span class="dot" style="background:${HCAT[c].c}"></span><h3>${HCAT[c].n}</h3>${t[c]>h[c]?`<span class="badge">vielä ${t[c]-h[c]}</span>`:''}</div><div class="day-list" style="margin-top:0">${ws.map(w => libCard(w,k)).join('')}</div>` : ''; }).join('')}
     <button class="btn" id="addCustom" style="margin-top:16px;width:100%">+ Oma treeni</button>
-    ${logged.length ? `<section class="logged"><h2>Tänään kirjattu</h2><ul>${logged.map(e=>`<li><b>${SPORT[e.sport]?.n||e.sport}</b>${e.title?` ${esc(e.title)}`:''} ${hm(+e.dur||0)}${e.dist?` · ${e.dist} km`:''}${e.rpe?` · RPE ${e.rpe}`:''}${setsSummary(e)}</li>`).join('')}</ul></section>`:''}`;
-  bindMode(); bindGoalEdit();
+    ${logged.length ? `<section class="logged"><h2>Tänään kirjattu</h2><ul>${logged.map(e=>`<li><button class="entry-open" data-entry="${e.id}"><b>${SPORT[e.sport]?.n||e.sport}</b>${e.title?` ${esc(e.title)}`:''} ${hm(+e.dur||0)}${e.dist?` · ${e.dist} km`:''}${e.rpe?` · RPE ${e.rpe}`:''}${e.details?' · <span style="color:var(--fjord)">väliajat ›</span>':''}</button>${setsSummary(e)}</li>`).join('')}</ul></section>`:''}`;
+  bindMode(); bindGoalEdit(); bindEntries($view);
   $view.querySelectorAll('[data-lib]').forEach(b => b.onclick = () => openLib(b.dataset.lib, k));
   $view.querySelectorAll('[data-libdo]').forEach(b => b.onclick = () => startLogItem(libItem(libById(b.dataset.libdo)), k));
   document.getElementById('addCustom').onclick = openCustom;
@@ -1096,10 +1238,10 @@ function renderToday(){
   </div>
   ${p.ph && p.ph.goal ? `<div class="note"><b>Jakson tavoite:</b> ${esc(p.ph.goal)}${wk?` · juoksua tällä viikolla noin ${wk} km`:''}${p.light?'<br>Kevyt viikko: volyymi noin −25 %, ei kovia harjoituksia. Hyvä aika testeille.':''}${p.ph.general?'<br><span class="muted small">Tämän kauden viikkopohja on suunnitelman esimerkkiviikosta.</span>':''}</div>`:''}
   ${race && toRace>0 && toRace<=60 ? `<div class="note"><b>${esc(race.n)}</b> ${toRace} päivän päästä (${fmtY(race.d)}). ${esc(race.z)}</div>`:''}
-  ${logged.length ? `<section class="logged"><h2>Tänään kirjattu</h2><ul>${logged.map(e=>`<li><b>${SPORT[e.sport]?.n||e.sport}</b> ${hm(+e.dur||0)}${e.dist?` · ${e.dist} km`:''}${paceStr(e)?` · ${paceStr(e)}`:''}${e.rpe?` · RPE ${e.rpe}`:''}${setsSummary(e)}</li>`).join('')}</ul></section>`:''}
+  ${logged.length ? `<section class="logged"><h2>Tänään kirjattu</h2><ul>${logged.map(e=>`<li><button class="entry-open" data-entry="${e.id}"><b>${SPORT[e.sport]?.n||e.sport}</b> ${hm(+e.dur||0)}${e.dist?` · ${e.dist} km`:''}${paceStr(e)?` · ${paceStr(e)}`:''}${e.rpe?` · RPE ${e.rpe}`:''}${e.details?' · <span style="color:var(--fjord)">väliajat ›</span>':''}</button>${setsSummary(e)}</li>`).join('')}</ul></section>`:''}
   `;
   $view.querySelectorAll('[data-do]').forEach(b => b.onclick = () => { const [dk,i] = b.dataset.do.split('|'); startLog(dk,+i); });
-  bindOpen(); bindMode();
+  bindOpen(); bindMode(); bindEntries($view);
 }
 
 function startLog(dk,i){ startLogItem(planFor(dk).items[i], dk); }
@@ -1131,6 +1273,7 @@ function openDetail(k,i){
     <button class="btn" id="dlgX" aria-label="Sulje">✕</button></div>
     <p>${d.intro}</p>
     ${d.secs.map(s=>`<h3>${s.h}</h3>${s.body}`).join('')}
+    ${(() => { const done = entriesOn(k).filter(e => e.sport===x.s); return done.length ? `<h3>Toteutunut</h3><div class="swl">${done.map(e => `<button data-entry="${e.id}"><span class="dot" style="background:${sp.c}"></span><span>${esc(e.title||sp.n)}<br><small>${hm(+e.dur||0)}${e.dist?` · ${e.dist} km`:''}${e.hr?` · ♥ ${e.hr}`:''}</small></span><small>${e.details?'väliajat ›':'›'}</small></button>`).join('')}</div>` : ''; })()}
     ${x.orig?`<p class="muted small">Vaihdettu ohjelman treenistä: ${esc(x.orig)}.</p>`:''}
     ${x.at!==k?`<p class="muted small">Siirretty päivältä ${DN[wd(x.at)]} ${fmt(x.at)}.</p>`:''}
     <div class="acts">${x.s!=='rest'?`<button class="btn primary" id="dlgLog">Kirjaa tämä suoritus</button>`:''}${x.s!=='race'?`<button class="btn" id="dlgMv">Siirrä</button>`:''}${x.s!=='race'&&x.s!=='rest'?`<button class="btn" id="dlgSw">Vaihda</button>`:''}<button class="btn" id="dlgC">Sulje</button></div>
@@ -1140,6 +1283,7 @@ function openDetail(k,i){
   const l = document.getElementById('dlgLog'); if (l) l.onclick = () => startLog(k,i);
   const mv = document.getElementById('dlgMv'); if (mv) mv.onclick = () => showMovePicker(x,k);
   const sw = document.getElementById('dlgSw'); if (sw) sw.onclick = () => showSwapPicker(x);
+  bindEntries(body);
   dlg.showModal(); body.scrollTop = 0; dlg.scrollTop = 0;
 }
 function showSwapPicker(x){
@@ -1183,13 +1327,13 @@ function renderWeek(){
   let rows = '';
   for (let i=0;i<7 && hyb;i++){
     const k = addDays(mon,i), done = entriesOn(k);
-    const list = done.map(e => `<div class="pl"><span class="dot" style="background:${SPORT[e.sport]?.c||'var(--muted)'}"></span><span>${esc(e.title||SPORT[e.sport]?.n||'')} <span class="muted small">${hm(+e.dur||0)}</span></span><span class="chk">✓</span></div>`).join('');
+    const list = done.map(e => `<div class="pl"><span class="dot" style="background:${SPORT[e.sport]?.c||'var(--muted)'}"></span><span><button class="open" data-entry="${e.id}">${esc(e.title||SPORT[e.sport]?.n||'')}</button> <span class="muted small">${hm(+e.dur||0)}</span></span><span class="chk">✓</span></div>`).join('');
     rows += `<div class="wkday ${k===t?'today':''}"><div class="dn">${DN[i]}<small>${fmt(k)}</small></div><div>${list||'<span class="muted small">–</span>'}</div></div>`;
   }
   for (let i=0;i<7 && !hyb;i++){
     const k = addDays(mon,i), p = planFor(k), done = entriesOn(k), ds = new Set(done.map(e=>e.sport));
     const plan = p.items.map((x,ii) => `<div class="pl"><span class="dot" style="background:${SPORT[x.s].c}"></span><span><button class="open" data-open="${k}|${ii}">${esc(x.t)}</button>${x.d?` <span class="muted small">${hm(x.d)}</span>`:''}${x.at!==k?` <span class="muted small">↷ ${DN[wd(x.at)]}</span>`:''}${x.orig?' <span class="muted small" title="Vaihdettu">⇄</span>':''}</span>${ds.has(x.s)?'<span class="chk" aria-label="tehty">✓</span>':''}</div>`).join('');
-    const extra = done.filter(e => !p.items.some(x=>x.s===e.sport)).map(e => `<div class="pl"><span class="dot" style="background:${SPORT[e.sport]?.c||'var(--muted)'}"></span><span class="muted">+ ${SPORT[e.sport]?.n||''} ${hm(+e.dur||0)}</span><span class="chk">✓</span></div>`).join('');
+    const extra = done.filter(e => !p.items.some(x=>x.s===e.sport)).map(e => `<div class="pl"><span class="dot" style="background:${SPORT[e.sport]?.c||'var(--muted)'}"></span><button class="open muted" data-entry="${e.id}">+ ${SPORT[e.sport]?.n||''} ${hm(+e.dur||0)}</button><span class="chk">✓</span></div>`).join('');
     rows += `<div class="wkday ${k===t?'today':''}"><div class="dn">${DN[i]}<small>${fmt(k)}</small></div><div>${plan||'<span class="muted small">Ei suunnitelmaa</span>'}${extra}</div></div>`;
   }
   $view.innerHTML = `
@@ -1205,7 +1349,7 @@ function renderWeek(){
       <div><b>${s.km} km</b> <span class="muted">juoksua${tgt?` / ${tgt} km`:''}</span></div>
     </div>`}
     <div style="margin-top:8px">${rows}</div>`;
-  bindOpen(); bindMode(); bindGoalEdit();
+  bindOpen(); bindMode(); bindGoalEdit(); bindEntries($view);
   document.getElementById('prev').onclick = () => { weekOff--; render(); };
   document.getElementById('next').onclick = () => { weekOff++; render(); };
   const n = document.getElementById('now'); if (n) n.onclick = () => { weekOff=0; render(); };
@@ -1474,19 +1618,12 @@ function renderProgress(){
   </div>
   ${strengthChartHtml()}
   <h2>Kaikki suoritukset</h2>
-  ${all.length ? `<ul class="hist">${all.slice(0,60).map(e=>`<li><div><b>${fmtY(e.date)}</b> ${SPORT[e.sport]?.n||''}${/^strava-/.test(e.id)&&e.title?` <span class="muted">${esc(e.title)}</span>`:''} · ${hm(+e.dur||0)}${e.dist?` · ${e.dist} km`:''}${paceStr(e)?` · ${paceStr(e)}`:''}${e.hr?` · ♥ ${e.hr}`:''}${e.rpe?` · RPE ${e.rpe}`:''}${setsSummary(e)}${e.note?`<div class="muted small">${esc(e.note)}</div>`:''}</div><div>${isStrava(e)?`<button class="del" data-fill="${e.id}">${e.sport==='str'&&!(Array.isArray(e.sets)&&e.sets.length)?'Lisää sarjat':'Täydennä'}</button>`:''}<button class="del" data-del="${e.id}">Poista</button></div></li>`).join('')}</ul>` : '<p class="muted">Ei vielä suorituksia.</p>'}
+  ${all.length ? `<ul class="hist">${all.slice(0,60).map(e=>`<li><div><button class="entry-open" data-entry="${e.id}"><b>${fmtY(e.date)}</b> ${SPORT[e.sport]?.n||''}${/^strava-/.test(e.id)&&e.title?` <span class="muted">${esc(e.title)}</span>`:''} · ${hm(+e.dur||0)}${e.dist?` · ${e.dist} km`:''}${paceStr(e)?` · ${paceStr(e)}`:''}${e.hr?` · ♥ ${e.hr}`:''}${e.rpe?` · RPE ${e.rpe}`:''}${e.details?' · <span style="color:var(--fjord)">väliajat ›</span>':''}</button>${setsSummary(e)}${e.note?`<div class="muted small">${esc(e.note)}</div>`:''}</div><div>${isStrava(e)?`<button class="del" data-fill="${e.id}">${e.sport==='str'&&!(Array.isArray(e.sets)&&e.sets.length)?'Lisää sarjat':'Täydennä'}</button>`:''}<button class="del" data-del="${e.id}">Poista</button></div></li>`).join('')}</ul>` : '<p class="muted">Ei vielä suorituksia.</p>'}
   `;
   const ss = document.getElementById('strsel'); if (ss) ss.onchange = () => { strEx = ss.value; _render(); };
   $view.querySelectorAll('[data-del]').forEach(b => b.onclick = () => { if (confirm('Poistetaanko suoritus?')) removeEntry(b.dataset.del); });
-  $view.querySelectorAll('[data-fill]').forEach(b => b.onclick = () => {
-    const e = entries.find(x => x.id===b.dataset.fill); if (!e) return;
-    draftClear();
-    // Voimatreeniin otetaan liikkeet lähimmästä ohjelman voimatreenistä; liikkeet voi vaihtaa lomakkeella
-    const x = e.sport==='str' && nearestStr(e.date);
-    if (x) return startLogItem(x, e.date, e.id);
-    prefill = {date:e.date, sport:e.sport, dur:e.dur||'', dist:e.dist||'', title:'', target:e.id, ex:null};
-    go('log');
-  });
+  $view.querySelectorAll('[data-fill]').forEach(b => b.onclick = () => fillEntry(b.dataset.fill));
+  bindEntries($view);
   $view.insertAdjacentHTML('beforeend', stravaHtml());
   bindStrava();
   $view.insertAdjacentHTML('beforeend', `<h2>Varmuuskopio ja tili</h2>

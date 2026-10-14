@@ -48,6 +48,8 @@ Every morning the app shows the day's workout from the plan. I log what I actual
 **Strava import**
 - Connect Strava once; new activities (sport, duration, distance, average heart rate) are imported automatically when the app opens. If the same sport is already logged by hand for that day, Strava only fills in the missing distance and heart rate.
 - A Supabase Edge Function (`supabase/functions/strava`) handles OAuth and the import, so the Strava client secret never reaches the browser.
+- Runs, rides, swims and rows also bring the full session: km splits (5 km for rides, laps for swims), heart-rate, pace/speed and elevation curves with hover, plus max HR, cadence and power.
+- A Strava weight-training session can be completed with sets: the log form prefills last time's weights, reps and set count, and exercises can be renamed or removed.
 
 **Sync**
 - Data is stored in a cloud database, so the app shows the same data on my phone and computer in real time.

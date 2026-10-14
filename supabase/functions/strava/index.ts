@@ -1,5 +1,5 @@
 // Strava-yhteys Norseman-treenipäiväkirjalle (Supabase Edge Function "strava").
-// Toiminnot (?action=): start, callback, sync, disconnect.
+// Toiminnot (?action=): start, callback, sync, backfill, disconnect.
 // JWT-tarkistus on pois päältä, koska Strava kutsuu callbackia ilman kirjautumista;
 // muut toiminnot tarkistavat käyttäjän itse Authorization-otsakkeesta.
 // Salaisuudet: STRAVA_CLIENT_ID, STRAVA_CLIENT_SECRET (SUPABASE_URL ja SUPABASE_SERVICE_ROLE_KEY tulevat automaattisesti).
@@ -30,6 +30,54 @@ const SPORT: Record<string, string> = {
   Crossfit: "func", HighIntensityIntervalTraining: "func",
   Rowing: "erg", VirtualRow: "erg",
 };
+
+// Kestävyyslajeille tuodaan tarkat tiedot: kilometriajat, kierrokset ja syke-/vauhtikäyrä.
+const DETAIL_SPORTS = new Set(["run", "bike", "swim", "erg"]);
+const MAX_DETAILS = 25; // per kutsu, Stravan rajoitus on 100 pyyntöä / 15 min
+const r1 = (x: number | null | undefined, k = 1) => x == null ? null : Math.round(x * k) / k;
+
+// Tasaa käyrän enintään n pisteeseen (keskiarvo per lohko).
+function down(arr: (number | null)[] | undefined, n: number) {
+  if (!arr || !arr.length) return null;
+  if (arr.length <= n) return arr;
+  const out: (number | null)[] = [], step = arr.length / n;
+  for (let i = 0; i < n; i++) {
+    const seg = arr.slice(Math.floor(i * step), Math.floor((i + 1) * step)).filter((x) => x != null) as number[];
+    out.push(seg.length ? seg.reduce((a, b) => a + b, 0) / seg.length : null);
+  }
+  return out;
+}
+
+async function fetchDetails(at: string, sid: number) {
+  const h = { headers: { Authorization: `Bearer ${at}` } };
+  const [ra, rs] = await Promise.all([
+    fetch(`https://www.strava.com/api/v3/activities/${sid}`, h),
+    fetch(`https://www.strava.com/api/v3/activities/${sid}/streams?keys=time,distance,heartrate,velocity_smooth,altitude&key_by_type=true`, h),
+  ]);
+  if (!ra.ok) throw new Error(`Strava activity ${ra.status}`);
+  const a = await ra.json();
+  // deno-lint-ignore no-explicit-any
+  const st: Record<string, any> = rs.ok ? await rs.json() : {};
+  const N = 300;
+  const d = down(st.distance?.data, N), hr = down(st.heartrate?.data, N), v = down(st.velocity_smooth?.data, N), alt = down(st.altitude?.data, N);
+  return {
+    sid, src: "strava",
+    moving: a.moving_time, elapsed: a.elapsed_time, dist: a.distance,
+    avgV: r1(a.average_speed, 100), maxV: r1(a.max_speed, 100),
+    avgHr: r1(a.average_heartrate), maxHr: r1(a.max_heartrate),
+    elev: r1(a.total_elevation_gain), cad: r1(a.average_cadence), watts: r1(a.average_watts),
+    // deno-lint-ignore no-explicit-any
+    splits: (a.splits_metric ?? []).map((x: any) => ({ d: r1(x.distance), t: x.moving_time, hr: r1(x.average_heartrate), el: r1(x.elevation_difference) })),
+    // deno-lint-ignore no-explicit-any
+    laps: (a.laps ?? []).map((x: any) => ({ d: r1(x.distance), t: x.moving_time, hr: r1(x.average_heartrate) })),
+    s: d ? { d: d.map((x) => r1(x)), hr: hr?.map((x) => r1(x)) ?? null, v: v?.map((x) => r1(x, 100)) ?? null, alt: alt?.map((x) => r1(x)) ?? null } : null,
+  };
+}
+
+async function attachDetails(at: string, entryId: string, sid: number) {
+  const details = await fetchDetails(at, sid);
+  await db.from("entries").update({ details }).eq("id", entryId);
+}
 
 async function userOf(req: Request) {
   const t = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "");
@@ -90,7 +138,11 @@ async function sync(userId: string) {
     acts = acts.concat(a);
     if (a.length < 100) break;
   }
-  let added = 0, merged = 0, last = row.last_sync ?? START;
+  let added = 0, merged = 0, detailed = 0, last = row.last_sync ?? START;
+  const withDetails = async (entryId: string, a: { id: number }, sport: string) => {
+    if (!DETAIL_SPORTS.has(sport) || detailed >= MAX_DETAILS) return;
+    try { await attachDetails(at, entryId, a.id); detailed++; } catch (_) { /* perustiedot jäävät, tiedot haetaan myöhemmin backfillillä */ }
+  };
   for (const a of acts) {
     const date = String(a.start_date_local).slice(0, 10);
     const sport = SPORT[a.sport_type] ?? "free";
@@ -99,23 +151,50 @@ async function sync(userId: string) {
     const hr = a.average_heartrate ? Math.round(a.average_heartrate) : null;
     last = Math.max(last, Math.floor(Date.parse(a.start_date) / 1000));
     // Sama päivä ja laji jo kirjattu käsin: täydennetään matka ja syke, ei luoda tuplaa.
-    const { data: same } = await db.from("entries").select("id,dist,hr")
+    const { data: same } = await db.from("entries").select("id,dist,hr,details")
       .eq("user_id", userId).eq("date", date).eq("sport", sport).not("id", "like", "strava-%").limit(1);
     if (same && same.length) {
       const m = same[0], patch: Record<string, number> = {};
       if (m.dist == null && dist) patch.dist = dist;
       if (m.hr == null && hr) patch.hr = hr;
       if (Object.keys(patch).length) { await db.from("entries").update(patch).eq("id", m.id); merged++; }
+      if (!m.details) await withDetails(m.id, a, sport);
       continue;
     }
     const { data: ins } = await db.from("entries").upsert(
       { id: `strava-${a.id}`, user_id: userId, date, sport, dur, dist, hr, title: a.name ?? "", note: "" },
       { onConflict: "id", ignoreDuplicates: true },
     ).select("id");
-    if (ins && ins.length) added++;
+    if (ins && ins.length) { added++; await withDetails(`strava-${a.id}`, a, sport); }
   }
   await db.from("strava_tokens").update({ last_sync: last, updated_at: new Date().toISOString() }).eq("user_id", userId);
-  return { connected: true, added, merged, athlete: row.athlete_id };
+  return { connected: true, added, merged, detailed, athlete: row.athlete_id };
+}
+
+// Tarkat tiedot jo tuoduille ja käsin kirjatuille kestävyyssuorituksille. Ei luo uusia rivejä.
+async function backfill(userId: string) {
+  const { data: row } = await db.from("strava_tokens").select("*").eq("user_id", userId).maybeSingle();
+  if (!row?.refresh_token) return { connected: false };
+  const at = await accessToken(row);
+  const { data: rows } = await db.from("entries").select("id,date,sport,details").eq("user_id", userId).gte("date", "2026-10-05").is("details", null);
+  const missing = (rows ?? []).filter((e) => DETAIL_SPORTS.has(e.sport));
+  if (!missing.length) return { connected: true, detailed: 0, left: 0 };
+  const r = await fetch(`https://www.strava.com/api/v3/athlete/activities?after=${START}&per_page=200`, { headers: { Authorization: `Bearer ${at}` } });
+  if (!r.ok) throw new Error(`Strava activities ${r.status}`);
+  const acts = await r.json();
+  let detailed = 0;
+  const used = new Set<string>();
+  for (const a of acts) {
+    if (detailed >= MAX_DETAILS) break;
+    const sport = SPORT[a.sport_type] ?? "free";
+    if (!DETAIL_SPORTS.has(sport)) continue;
+    const date = String(a.start_date_local).slice(0, 10);
+    const e = missing.find((x) => x.id === `strava-${a.id}`) ?? missing.find((x) => !used.has(x.id) && !x.id.startsWith("strava-") && x.date === date && x.sport === sport);
+    if (!e || used.has(e.id)) continue;
+    used.add(e.id);
+    try { await attachDetails(at, e.id, a.id); detailed++; } catch (_) { /* yritetään seuraavalla kerralla */ }
+  }
+  return { connected: true, detailed, left: missing.length - detailed };
 }
 
 Deno.serve(async (req) => {
@@ -133,6 +212,7 @@ Deno.serve(async (req) => {
       return json({ url });
     }
     if (action === "sync") return json(await sync(user.id));
+    if (action === "backfill") return json(await backfill(user.id));
     if (action === "disconnect") {
       const { data: row } = await db.from("strava_tokens").select("*").eq("user_id", user.id).maybeSingle();
       if (row?.refresh_token) {
