@@ -164,7 +164,11 @@ dialog::backdrop{background:rgba(10,20,25,.5)}
 .sheet th{text-align:left;font-weight:600;color:var(--muted);font-size:.8rem;padding:6px 8px;border-bottom:1px solid var(--line)}
 .sheet td{padding:8px;border-bottom:1px solid var(--line);vertical-align:top}
 .sheet td.mv{font-weight:600}
-.sheet .acts{margin-top:22px;display:flex;gap:10px}
+.sheet .acts{margin-top:22px;display:flex;gap:10px;flex-wrap:wrap}
+.mvdays{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin:4px 0}
+.mvday{padding:4px 0;min-height:48px;display:flex;flex-direction:column;align-items:center;line-height:1.1}
+.mvday small{font-size:.72rem;color:var(--muted)}
+.mvday.cur{opacity:.4}
 @media (prefers-reduced-motion:reduce){.toast{transition:none}}
 </style>
 </head>
@@ -351,7 +355,7 @@ function taperGeneric(k,race){
 }
 
 function phaseOf(k){ return PHASES.find(p => k>=p.a && k<=p.b) || null; }
-function planFor(k){
+function basePlan(k){
   const race = RACES.find(r => r.d===k);
   const ph = phaseOf(k);
   if (race) return {ph, race, items:[W('race',race.n,0,race.z)], light:false, wi:null};
@@ -363,6 +367,16 @@ function planFor(k){
   let items = ph.t(ph,wi%4,light)[wd(k)];
   if (light) items = items.map(x => x.q ? W(x.s==='run'?'run':x.s, x.s==='run'?'Helppo juoksu (kevyt viikko)':x.t.split(':')[0]+' kevyesti', Math.round(x.d*0.75/5)*5, 'Z1–Z2') : {...x, d:Math.round(x.d*0.75/5)*5});
   return {ph, items, light, wi};
+}
+// Päivän suunnitelma siirrot huomioiden. Jokainen treeni muistaa alkuperäisen päivänsä (at), indeksinsä (ai) ja kevyen viikon tilan (al).
+function planFor(k){
+  const p = basePlan(k);
+  const items = p.items.map((x,i) => ({...x, at:k, ai:i, al:p.light})).filter(x => !moveOf(k, x.ai));
+  moves.filter(m => m.to===k).forEach(m => {
+    const b = basePlan(m.from), x = b.items[m.idx];
+    if (x && x.s!=='race') items.push({...x, at:m.from, ai:m.idx, al:b.light});
+  });
+  return {...p, items};
 }
 function weekKmTarget(mon){
   const ph = phaseOf(mon);
@@ -584,27 +598,51 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 /* ---------- Tallennus (Supabase) ---------- */
 let entries = [];          // {id,date,sport,dur,dist,hr,rpe,title,note,ts}
 let sb = null, session = null, online = false;
-const LS = 'norseman-diary-cache-v1';
+let moves = [];            // {from,idx,to}: treeni päivältä from (indeksi idx) siirretty päivälle to
+const LS = 'norseman-diary-cache-v1', LSM = 'norseman-moves-cache-v1';
+const moveOf = (k,i) => moves.find(m => m.from===k && m.idx===i);
 const configured = !SUPABASE_URL.startsWith('LIITÄ') && !SUPABASE_KEY.startsWith('LIITÄ');
 function lsLoad(){ try { return JSON.parse(localStorage.getItem(LS)||'[]'); } catch(e){ return []; } }
 function lsSave(){ try { localStorage.setItem(LS, JSON.stringify(entries)); } catch(e){} }
+function lsLoadMoves(){ try { return JSON.parse(localStorage.getItem(LSM)||'[]'); } catch(e){ return []; } }
+function lsSaveMoves(){ try { localStorage.setItem(LSM, JSON.stringify(moves)); } catch(e){} }
 const fromRow = r => ({id:r.id, date:r.date, sport:r.sport, dur:r.dur, dist:r.dist==null?null:+r.dist, hr:r.hr, rpe:r.rpe, title:r.title||'', note:r.note||'', ts:Date.parse(r.created_at)||0, sets:r.sets||null});
 
 async function loadEntries(){
   if (!sb || !session) return;
   const {data, error} = await sb.from('entries').select('*').order('date',{ascending:true});
   if (error){ online=false; setSync(); return; }
-  entries = data.map(fromRow); online = true; lsSave(); setSync(); render();
+  entries = data.map(fromRow); online = true; lsSave();
+  await loadMoves(); setSync(); render();
+}
+async function loadMoves(){
+  const {data, error} = await sb.from('moves').select('from_date,idx,to_date');
+  if (error) return; // taulu puuttuu tai ei yhteyttä: käytetään välimuistia
+  moves = data.map(r => ({from:r.from_date, idx:r.idx, to:r.to_date})); lsSaveMoves();
+}
+const MOVES_SQL_HINT = 'Siirto epäonnistui. Jos et ole vielä ajanut paivitys-2-siirrot.sql:ää Supabasessa, aja se.';
+async function moveItem(x, to){
+  if (to===x.at){
+    const {error} = await sb.from('moves').delete().eq('from_date', x.at).eq('idx', x.ai);
+    if (error){ toast(MOVES_SQL_HINT); return false; }
+    moves = moves.filter(m => !(m.from===x.at && m.idx===x.ai));
+  } else {
+    const {error} = await sb.from('moves').upsert({user_id:session.user.id, from_date:x.at, idx:x.ai, to_date:to}, {onConflict:'user_id,from_date,idx'});
+    if (error){ toast(MOVES_SQL_HINT); return false; }
+    moves = moves.filter(m => !(m.from===x.at && m.idx===x.ai)).concat({from:x.at, idx:x.ai, to});
+  }
+  lsSaveMoves(); return true;
 }
 let channel = null;
 function subscribe(){
   if (channel) return;
   channel = sb.channel('entries-sync')
     .on('postgres_changes', {event:'*', schema:'public', table:'entries'}, () => loadEntries())
+    .on('postgres_changes', {event:'*', schema:'public', table:'moves'}, () => loadEntries())
     .subscribe();
 }
 async function initApp(){
-  entries = lsLoad();
+  entries = lsLoad(); moves = lsLoadMoves();
   if (!configured || !window.supabase){ _render(); setSync(); return; }
   sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
   const {data} = await sb.auth.getSession();
@@ -612,7 +650,7 @@ async function initApp(){
   sb.auth.onAuthStateChange((_e, s) => {
     const was = !!session; session = s;
     if (s && !was){ loadEntries(); subscribe(); }
-    if (!s){ entries = []; lsSave(); }
+    if (!s){ entries = []; lsSave(); moves = []; lsSaveMoves(); }
     _render(); setSync();
   });
   _render(); setSync();
@@ -741,7 +779,7 @@ function workoutCard(x,k,i,doneSports){
   return `<div class="wo ${isDone?'isdone':''}">
     <div class="bar" style="background:${sp.c}"></div>
     <button class="open" data-open="${k}|${i}"><div class="sport" style="color:${sp.c}">${sp.n}${x.d?` · ${hm(x.d)}`:''}</div>
-      <h3>${esc(x.t)}</h3>${x.z?`<div class="det">${esc(x.z)}</div>`:''}<span class="more">Näytä sisältö</span></button>
+      <h3>${esc(x.t)}</h3>${x.z?`<div class="det">${esc(x.z)}</div>`:''}${x.at!==k?`<div class="det">Siirretty päivältä ${DN[wd(x.at)]} ${fmt(x.at)}</div>`:''}<span class="more">Näytä sisältö</span></button>
     ${canLog ? (isDone ? `<span class="btn done" aria-label="Kirjattu">✓ Tehty</span>`
       : `<button class="btn primary" data-do="${k}|${i}">Kirjaa</button>`) : ''}
   </div>`;
@@ -773,7 +811,7 @@ function renderToday(){
     ${profileSvg(k)}
   </section>
   <div class="day-list">
-    ${p.items.length ? p.items.map((x,i)=>workoutCard(x,showK,i,doneSports)).join('') : '<div class="empty">Suunnitelma on päättynyt. Kirjaa silti vapaasti.</div>'}
+    ${p.items.length ? p.items.map((x,i)=>workoutCard(x,showK,i,doneSports)).join('') : `<div class="empty">${p.ph ? 'Ei suunniteltua treeniä tälle päivälle. Kirjaa silti vapaasti.' : 'Suunnitelma on päättynyt. Kirjaa silti vapaasti.'}</div>`}
   </div>
   ${p.ph && p.ph.goal ? `<div class="note"><b>Jakson tavoite:</b> ${esc(p.ph.goal)}${wk?` · juoksua tällä viikolla noin ${wk} km`:''}${p.light?'<br>Kevyt viikko: volyymi noin −25 %, ei kovia harjoituksia. Hyvä aika testeille.':''}${p.ph.general?'<br><span class="muted small">Tämän kauden viikkopohja on suunnitelman esimerkkiviikosta.</span>':''}</div>`:''}
   ${race && toRace>0 && toRace<=60 ? `<div class="note"><b>${esc(race.n)}</b> ${toRace} päivän päästä (${fmtY(race.d)}). ${esc(race.z)}</div>`:''}
@@ -785,9 +823,8 @@ function renderToday(){
 
 function startLog(dk,i){
   const x = planFor(dk).items[i];
-  const p = planFor(dk);
   let ex = null;
-  if (x.s==='str'){ const d = detailFor(x,dk,p.light); if (d.ex) ex = d.ex.map(r => ({name:r[0], rx:r[1], load:r[2]||'', n: p.light ? 2 : setCount(r[1])})); }
+  if (x.s==='str'){ const d = detailFor(x,x.at,x.al); if (d.ex) ex = d.ex.map(r => ({name:r[0], rx:r[1], load:r[2]||'', n: x.al ? 2 : setCount(r[1])})); }
   prefill = {date: dk < todayKey() || dk===todayKey() ? dk : todayKey(), sport:x.s==='race'?'run':x.s, dur:x.d||'', dist:x.k||'', title:x.t, ex};
   const dlg = document.getElementById('dlg'); if (dlg.open) dlg.close();
   go('log');
@@ -795,18 +832,37 @@ function startLog(dk,i){
 function bindOpen(){ $view.querySelectorAll('[data-open]').forEach(b => b.onclick = () => { const [dk,i]=b.dataset.open.split('|'); openDetail(dk,+i); }); }
 function openDetail(k,i){
   const p = planFor(k), x = p.items[i]; if (!x) return;
-  const d = detailFor(x,k,p.light), sp = SPORT[x.s];
+  const d = detailFor(x,x.at,x.al), sp = SPORT[x.s];
   const body = document.getElementById('dlgBody');
   body.innerHTML = `<div class="top"><div><div class="sport" style="color:${sp.c};font-weight:600;font-size:.85rem">${sp.n} · ${DN[wd(k)]} ${fmt(k)}${x.d?` · ${hm(x.d)}`:''}</div>
     <h2 id="dlgT">${esc(x.t)}</h2>${x.z?`<div class="muted">${esc(x.z)}</div>`:''}</div>
     <button class="btn" id="dlgX" aria-label="Sulje">✕</button></div>
     <p>${d.intro}</p>
     ${d.secs.map(s=>`<h3>${s.h}</h3>${s.body}`).join('')}
-    <div class="acts">${x.s!=='rest'?`<button class="btn primary" id="dlgLog">Kirjaa tämä suoritus</button>`:''}<button class="btn" id="dlgC">Sulje</button></div>`;
+    ${x.at!==k?`<p class="muted small">Siirretty päivältä ${DN[wd(x.at)]} ${fmt(x.at)}.</p>`:''}
+    <div class="acts">${x.s!=='rest'?`<button class="btn primary" id="dlgLog">Kirjaa tämä suoritus</button>`:''}${x.s!=='race'?`<button class="btn" id="dlgMv">Siirrä</button>`:''}<button class="btn" id="dlgC">Sulje</button></div>
+    <div id="mvBox" hidden></div>`;
   const dlg = document.getElementById('dlg');
   document.getElementById('dlgX').onclick = document.getElementById('dlgC').onclick = () => dlg.close();
   const l = document.getElementById('dlgLog'); if (l) l.onclick = () => startLog(k,i);
+  const mv = document.getElementById('dlgMv'); if (mv) mv.onclick = () => showMovePicker(x,k);
   dlg.showModal(); body.scrollTop = 0; dlg.scrollTop = 0;
+}
+function showMovePicker(x,k){
+  const box = document.getElementById('mvBox'), mon = monday(k);
+  const chip = d => `<button class="btn mvday${d===k?' cur':''}" data-to="${d}" ${d===k?'disabled':''}><b>${DN[wd(d)]}</b><small>${fmt(d)}</small></button>`;
+  box.innerHTML = `<h3>Siirrä päivälle</h3>
+    <div class="mvdays">${[0,1,2,3,4,5,6].map(n => chip(addDays(mon,n))).join('')}</div>
+    <div class="mvdays">${[7,8,9,10,11,12,13].map(n => chip(addDays(mon,n))).join('')}</div>
+    <label class="small">Muu päivä<input type="date" id="mvDate" value="${k}"></label>
+    ${x.at!==k?`<button class="btn" data-to="${x.at}" style="margin-top:10px">Palauta alkuperäiselle päivälle (${DN[wd(x.at)]} ${fmt(x.at)})</button>`:''}`;
+  box.hidden = false; box.scrollIntoView({block:'nearest', behavior:'smooth'});
+  const doMove = async to => {
+    if (!to || to===k) return;
+    if (await moveItem(x, to)){ document.getElementById('dlg').close(); toast(`Siirretty: ${DN[wd(to)]} ${fmt(to)}`); render(); }
+  };
+  box.querySelectorAll('[data-to]').forEach(b => b.onclick = () => doMove(b.dataset.to));
+  document.getElementById('mvDate').onchange = e => doMove(e.target.value);
 }
 document.getElementById('dlg').addEventListener('click', e => { if (e.target.id==='dlg') e.target.close(); });
 function renderWeek(){
@@ -816,7 +872,7 @@ function renderWeek(){
   let rows = '';
   for (let i=0;i<7;i++){
     const k = addDays(mon,i), p = planFor(k), done = entriesOn(k), ds = new Set(done.map(e=>e.sport));
-    const plan = p.items.map((x,ii) => `<div class="pl"><span class="dot" style="background:${SPORT[x.s].c}"></span><span><button class="open" data-open="${k}|${ii}">${esc(x.t)}</button>${x.d?` <span class="muted small">${hm(x.d)}</span>`:''}</span>${ds.has(x.s)?'<span class="chk" aria-label="tehty">✓</span>':''}</div>`).join('');
+    const plan = p.items.map((x,ii) => `<div class="pl"><span class="dot" style="background:${SPORT[x.s].c}"></span><span><button class="open" data-open="${k}|${ii}">${esc(x.t)}</button>${x.d?` <span class="muted small">${hm(x.d)}</span>`:''}${x.at!==k?` <span class="muted small">↷ ${DN[wd(x.at)]}</span>`:''}</span>${ds.has(x.s)?'<span class="chk" aria-label="tehty">✓</span>':''}</div>`).join('');
     const extra = done.filter(e => !p.items.some(x=>x.s===e.sport)).map(e => `<div class="pl"><span class="dot" style="background:${SPORT[e.sport]?.c||'var(--muted)'}"></span><span class="muted">+ ${SPORT[e.sport]?.n||''} ${hm(+e.dur||0)}</span><span class="chk">✓</span></div>`).join('');
     rows += `<div class="wkday ${k===t?'today':''}"><div class="dn">${DN[i]}<small>${fmt(k)}</small></div><div>${plan||'<span class="muted small">Ei suunnitelmaa</span>'}${extra}</div></div>`;
   }
