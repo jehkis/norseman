@@ -19,7 +19,7 @@
 :root{
   --bg:#E9EEF0; --surface:#F8FAFA; --ink:#14232C; --muted:#5B6B74; --line:#CBD5D9;
   --fjord:#245E66; --fjord-soft:#D3E3E2;
-  --swim:#2C6CA3; --bike:#5B7A34; --run:#B0502A; --str:#5A5D82; --rest:#8A979D; --free:#7A6A4E; --race:#14232C;
+  --swim:#2C6CA3; --bike:#5B7A34; --run:#B0502A; --str:#5A5D82; --rest:#8A979D; --free:#7A6A4E; --race:#14232C; --func:#8A4F7D; --erg:#2E7F7A;
   --done:#2F7D4F;
   box-sizing:border-box;
   padding-top:env(safe-area-inset-top,0px);
@@ -30,14 +30,14 @@
   :root:not([data-theme="light"]){
     --bg:#0F1A20; --surface:#17252D; --ink:#E4ECEE; --muted:#93A4AC; --line:#2A3B44;
     --fjord:#6FB3B4; --fjord-soft:#1F3A3E;
-    --swim:#6BA8DB; --bike:#9BBE6A; --run:#E4875E; --str:#A3A6D6; --rest:#7C8C93; --free:#C2AE88; --race:#E4ECEE;
+    --swim:#6BA8DB; --bike:#9BBE6A; --run:#E4875E; --str:#A3A6D6; --rest:#7C8C93; --free:#C2AE88; --race:#E4ECEE; --func:#D69BC8; --erg:#6CC2BB;
     --done:#6CC48E; color-scheme:dark;
   }
 }
 :root[data-theme="dark"]{
   --bg:#0F1A20; --surface:#17252D; --ink:#E4ECEE; --muted:#93A4AC; --line:#2A3B44;
   --fjord:#6FB3B4; --fjord-soft:#1F3A3E;
-  --swim:#6BA8DB; --bike:#9BBE6A; --run:#E4875E; --str:#A3A6D6; --rest:#7C8C93; --free:#C2AE88; --race:#E4ECEE;
+  --swim:#6BA8DB; --bike:#9BBE6A; --run:#E4875E; --str:#A3A6D6; --rest:#7C8C93; --free:#C2AE88; --race:#E4ECEE; --func:#D69BC8; --erg:#6CC2BB;
   --done:#6CC48E; color-scheme:dark;
 }
 *,*::before,*::after{box-sizing:inherit}
@@ -169,6 +169,24 @@ dialog::backdrop{background:rgba(10,20,25,.5)}
 .mvday{padding:4px 0;min-height:48px;display:flex;flex-direction:column;align-items:center;line-height:1.1}
 .mvday small{font-size:.72rem;color:var(--muted)}
 .mvday.cur{opacity:.4}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:999px;padding:3px;background:var(--surface);margin-top:4px}
+.seg button{border:none;background:none;border-radius:999px;padding:6px 16px;min-height:36px;font-weight:600;color:var(--muted)}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+.hgoal{background:var(--surface);border-radius:10px;padding:14px;margin-top:16px}
+.hgoal .top{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap}
+.hgoal h3{font-size:1.3rem}
+.hg-row{display:grid;grid-template-columns:7.5em 1fr auto;gap:10px;align-items:center;padding:7px 0;border-top:1px solid var(--line)}
+.hgoal .top + .hg-row{border-top:none}
+.pips{display:flex;gap:5px;flex-wrap:wrap}
+.pip{width:14px;height:14px;border-radius:50%;border:2px solid var(--c)}
+.pip.on{background:var(--c)}
+.mbar{height:6px;background:var(--line);border-radius:3px;overflow:hidden;margin-top:5px}
+.mbar i{display:block;height:100%;background:var(--c)}
+.libh{display:flex;align-items:baseline;gap:8px;margin:22px 0 8px}
+.libh h3{font-size:1.25rem}
+.swl{display:flex;flex-direction:column;gap:6px;margin:6px 0 4px}
+.swl button{display:grid;grid-template-columns:10px 1fr auto;gap:10px;align-items:center;text-align:left;border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:8px 12px;min-height:48px}
+.swl button small{color:var(--muted)}
 @media (prefers-reduced-motion:reduce){.toast{transition:none}}
 </style>
 </head>
@@ -205,9 +223,9 @@ const fmtY = k => { const d = parse(k); return `${d.getDate()}.${d.getMonth()+1}
 /* ---------- Lajit ---------- */
 const SPORT = {
   run:{n:'Juoksu',c:'var(--run)'}, swim:{n:'Uinti',c:'var(--swim)'}, bike:{n:'Pyöräily',c:'var(--bike)'},
-  str:{n:'Voima',c:'var(--str)'}, free:{n:'Vapaa liikunta',c:'var(--free)'}, rest:{n:'Lepo',c:'var(--rest)'}, race:{n:'Kilpailu',c:'var(--race)'}
+  str:{n:'Voima',c:'var(--str)'}, func:{n:'Toiminnallinen',c:'var(--func)'}, erg:{n:'Soutu/SkiErg',c:'var(--erg)'}, free:{n:'Vapaa liikunta',c:'var(--free)'}, rest:{n:'Lepo',c:'var(--rest)'}, race:{n:'Kilpailu',c:'var(--race)'}
 };
-const LOGSPORTS = ['run','swim','bike','str','free'];
+const LOGSPORTS = ['run','swim','bike','str','func','erg','free'];
 
 /* ---------- Suunnitelma ---------- */
 const W = (s,t,d,z,q,k) => ({s,t,d,z:z||'',q:!!q,k:k||null});
@@ -369,12 +387,16 @@ function basePlan(k){
   return {ph, items, light, wi};
 }
 // Päivän suunnitelma siirrot huomioiden. Jokainen treeni muistaa alkuperäisen päivänsä (at), indeksinsä (ai) ja kevyen viikon tilan (al).
+// Vaihdettu treeni (alt) korvataan kirjaston treenillä; orig kertoo ohjelman alkuperäisen treenin.
 function planFor(k){
   const p = basePlan(k);
-  const items = p.items.map((x,i) => ({...x, at:k, ai:i, al:p.light})).filter(x => !moveOf(k, x.ai));
-  moves.filter(m => m.to===k).forEach(m => {
+  const swap = (x, m) => { const w = m && m.alt && libById(m.alt); return w ? {...libItem(w), at:x.at, ai:x.ai, al:false, orig:x.t} : x; };
+  const items = p.items.map((x,i) => ({...x, at:k, ai:i, al:p.light}))
+    .filter(x => { const m = moveOf(k, x.ai); return !m || m.to===k; })
+    .map(x => swap(x, moveOf(k, x.ai)));
+  moves.filter(m => m.to===k && m.from!==k).forEach(m => {
     const b = basePlan(m.from), x = b.items[m.idx];
-    if (x && x.s!=='race') items.push({...x, at:m.from, ai:m.idx, al:b.light});
+    if (x && x.s!=='race') items.push(swap({...x, at:m.from, ai:m.idx, al:b.light}, m));
   });
   return {...p, items};
 }
@@ -577,7 +599,59 @@ function raceDetail(x,k){
     'Huoltoauto ja tukitiimi mukana (Norseman ja Swedeman)','Ravinto 60–90 g hiilihydraattia tunnissa pyörällä','Aloita uinti ja pyörä hillitysti']))]};
 }
 
+/* ---------- Hybridi: treenikirjasto ---------- */
+const HCAT = {str:{n:'Perus punttis',c:'var(--str)'}, func:{n:'Toiminnallinen',c:'var(--func)'}, end:{n:'Kestävyys',c:'var(--run)'}};
+const HCAT_P = {str:['str'], func:['str','quality'], end:['z2']};
+// p: tarkoitukset, joiden vaihtoehdoksi treeni sopii Norseman-ohjelmassa (z2, quality, long, str)
+const HLIB = [
+  {id:'v1',cat:'str',s:'str',t:'Koko kroppa',d:45,z:'RIR 2',p:['str'],intro:'Perusvoimaa koko keholle, noin 45 min.',
+    ex:[['Takakyykky','3 × 5–8','RIR 2'],['Romanialainen maastaveto','3 × 6–8','RIR 2'],['Penkkipunnerrus','3 × 6–8','RIR 2'],['Leuanveto','3 × 5–8','RIR 2'],['Pohjenosto','2 × 10–12','raskas'],['Lankku','2 × 45 s','–']]},
+  {id:'v2',cat:'str',s:'str',t:'Jalat + veto',d:50,z:'RIR 2',p:['str'],intro:'Raskas alavartalo ja vetävät liikkeet: tämä voima tukee pyöräilyä ja mäkiä. Jätä vähintään 24 h ennen kovaa juoksua.',
+    ex:[['Takakyykky tai jalkaprässi','4 × 4–6','RIR 2'],['Romanialainen maastaveto','3 × 6–8','RIR 2'],['Askelnousu laatikolle','3 × 6/jalka','RIR 2'],['Leuanveto','4 × 5–8','RIR 2'],['Kulmasoutu','3 × 8','RIR 2'],['Pohjenosto','3 × 10','raskas']]},
+  {id:'v3',cat:'str',s:'str',t:'Ylävartalo',d:40,z:'RIR 2',p:['str'],intro:'Ylävartalo ja keskivartalo. Jalat saavat levätä, joten sopii kovan juoksun tai pitkän lenkin viereen.',
+    ex:[['Penkkipunnerrus','4 × 5–8','RIR 2'],['Leuanveto','4 × 5–8','RIR 2'],['Pystypunnerrus käsipainoilla','3 × 6–8','RIR 2'],['Yhden käden käsipainosoutu','3 × 8/puoli','RIR 2'],['Dipit','2 × 8–12','RIR 2'],['Pallof press','2 × 10/puoli','–']]},
+  {id:'v4',cat:'str',s:'str',t:'Kehonpaino (ei salia)',d:30,z:'RIR 2–3',p:['str'],intro:'Matkoille ja kiireisiin päiviin. Tee 3 kierrosta, lepoa 60–90 s liikkeiden välissä.',
+    ex:[['Punnerrus','3 × 10–15','RIR 2'],['Bulgarialainen askelkyykky','3 × 10/jalka','RIR 2'],['Leuanveto tai ovisoutu','3 × 6–10','RIR 2'],['Yhden jalan lantionnosto','3 × 12/jalka','–'],['Hyppykyykky','3 × 8','räjähtävä'],['Sivulankku','2 × 30 s/puoli','–']]},
+  {id:'t1',cat:'func',s:'func',t:'Kahvakuula-EMOM',d:30,z:'RPE 6–7',p:['str','quality'],intro:'Joka minuutin alussa uusi liike, loppuminuutti on lepoa. 6 kierrosta eli 24 min, lisäksi lämmittely.',
+    secs:[['Lämmittely','5 min soutu tai hölkkä, kevyet heilautukset'],['EMOM 24 min',ol(['15 kahvakuulaheilautusta','8 goblet-kyykkyä','6+6 yhden käden punnerrusta pystyyn','30 m farmarikävely raskaalla kuulalla'])],['Vinkki','Valitse paino, jolla jokaiselle minuutille jää 15–25 s lepoa.']]},
+  {id:'t2',cat:'func',s:'func',t:'Reki + farmari + soutu',d:40,z:'RPE 7',p:['quality','str'],intro:'Hybridikierto tasaisella tahdilla. Tavoite on pysyä samassa tahdissa kaikki kierrokset, ei maksimiteho.',
+    secs:[['5 kierrosta',ol(['250 m soutu','25 m rekipunnerrus','50 m farmarikävely','10 seinäpalloa'])],['Ilman rekeä','Rekipunnerruksen tilalle 10 kahvakuulaheilautusta + 10 askelkyykkyä.']]},
+  {id:'t3',cat:'func',s:'func',t:'Juoksu + asemat',d:45,z:'RPE 7–8',p:['quality'],intro:'Juoksua väsyneillä jaloilla ("compromised running"). Kova treeni: ei raskaan jalkatreenin jälkeistä päivää.',
+    secs:[['4 kierrosta',ol(['1 km juoksu reippaasti (kynnyksen tuntumassa)','Asema, joka kierroksella eri: 20 seinäpalloa · 20 askelkyykkyä · 500 m SkiErg · 15 burpee-pituushyppyä'])],['Loppuun','10 min hölkkä tai kevyt pyöräily']]},
+  {id:'t4',cat:'func',s:'func',t:'Kevyt kierto',d:35,z:'RPE 5',p:['z2'],intro:'Rauhallinen liikkuvuutta ja peruskestävyyttä yhdistävä kierto. Hyvä palautuspäivälle.',
+    secs:[['3–4 kierrosta rauhassa',ol(['200 m soutu','10 kahvakuulamaastavetoa','10 askelnousua/jalka','10 TRX-soutua','1 min liikkuvuus (90/90, kyykkyistunta)'])]]},
+  {id:'k1',cat:'end',s:'run',t:'Z2 vapaavalintainen',d:60,z:'syke 120–140',p:['z2'],intro:'Juoksu, pyörä, soutu tai uinti, mikä huvittaa. Vaihda laji kirjatessa.',
+    secs:[['Ohje',ul(['45–90 min','Syke 120–140 (noin 65–75 % maksimista)','Puhe kulkee koko ajan'])]]},
+  {id:'k2',cat:'end',s:'erg',t:'Soutu/SkiErg Z2',d:50,z:'syke 120–140',p:['z2'],intro:'Matalan iskutuksen aerobista työtä ja vetoliikkeen kestävyyttä uintia varten.',
+    secs:[['Rakenne',ol(['10 min soutu rauhassa','4 × 8 min vuorotellen SkiErg ja soutu, 1 min tauko','5 min loppuverryttely'])]]},
+  {id:'k3',cat:'end',s:'free',t:'Repputreeni mäessä',d:60,z:'reppu 10–15 kg',p:['z2','long'],intro:'Mäki- tai porraskävely painavalla repulla. Valmistaa Zombie Hilliin ja Gaustatoppenin kivikkoon.',
+    secs:[['Ohje',ul(['Reppu 10–15 kg','Mäki, portaat tai maastopolku','Syke 120–140, tasainen tahti','Alamäet hallitusti: eksentrinen voima'])]]},
+  {id:'k4',cat:'end',s:'run',t:'Kynnysintervallit',d:50,z:'syke 155–162',p:['quality'],intro:'Kova kestävyystreeni. Käy juoksuna, pyöränä tai soutuna.',
+    secs:[['Rakenne',ol(['15 min lämmittely','3 × 10 min syke 155–162, palautus 3 min','10 min loppuverryttely'])]]},
+  {id:'k5',cat:'end',s:'run',t:'Pitkä rauhallinen',d:105,z:'syke 120–140',p:['long'],intro:'Viikon pitkä. Juoksu, pyörä tai vaellus, kunhan teho pysyy matalana.',
+    secs:[['Ohje',ul(['90–150 min','Syke 120–140','Juomaa ja energiaa yli 75 min lenkeille'])]]}
+];
+const libAll = () => HLIB.concat(settings.custom||[]);
+const libById = id => libAll().find(w => w.id===id);
+const libItem = w => ({s:w.s, t:w.t, d:w.d, z:w.z||'', q:false, k:null, lib:w.id});
+function libDetail(w){
+  const secs = [];
+  if (w.ex) secs.push(STR_WARMUP, SEC('Ohjelma', tbl(w.ex, ['Liike','Sarjat × toistot','Kuorma'])));
+  (w.secs||[]).forEach(([h,b]) => secs.push(SEC(h, /^</.test(b) ? b : `<p>${b}</p>`)));
+  if (w.desc) secs.push(SEC('Sisältö', `<p>${esc(w.desc).replace(/\n/g,'<br>')}</p>`));
+  if (w.ex) secs.push(STR_RULES);
+  return {intro: w.intro ? esc(w.intro) : '', ex: w.ex||null, secs};
+}
+// Ohjelman treenin tarkoitus, jonka perusteella vaihtoehdot järjestetään.
+function purposeOf(x){
+  if (x.s==='str') return 'str';
+  if (x.q) return 'quality';
+  if ((x.k && x.k>=15) || /^Pitkä/.test(x.t) || x.d>=100) return 'long';
+  return 'z2';
+}
+
 function detailFor(x,k,light){
+  if (x.lib){ const w = libById(x.lib); if (w) return libDetail(w); }
   let d;
   if (x.s==='str') d = strengthDetail(x,k,light);
   else if (x.s==='run') d = runDetail(x,k);
@@ -598,7 +672,11 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 /* ---------- Tallennus (Supabase) ---------- */
 let entries = [];          // {id,date,sport,dur,dist,hr,rpe,title,note,ts}
 let sb = null, session = null, online = false;
-let moves = [];            // {from,idx,to}: treeni päivältä from (indeksi idx) siirretty päivälle to
+let moves = [];            // {from,idx,to,alt}: treeni päivältä from (indeksi idx) siirretty päivälle to ja/tai vaihdettu kirjaston treeniin alt
+const SETTINGS_DEF = {mode:'norseman', targets:{str:2, func:1, end:2, endMin:180}, custom:[]};
+let settings = SETTINGS_DEF;
+const LSS = 'norseman-settings-cache-v1';
+const mergeSettings = d => ({...SETTINGS_DEF, ...(d||{}), targets:{...SETTINGS_DEF.targets, ...((d&&d.targets)||{})}, custom:(d&&d.custom)||[]});
 const LS = 'norseman-diary-cache-v1', LSM = 'norseman-moves-cache-v1';
 const moveOf = (k,i) => moves.find(m => m.from===k && m.idx===i);
 const configured = !SUPABASE_URL.startsWith('LIITÄ') && !SUPABASE_KEY.startsWith('LIITÄ');
@@ -606,6 +684,8 @@ function lsLoad(){ try { return JSON.parse(localStorage.getItem(LS)||'[]'); } ca
 function lsSave(){ try { localStorage.setItem(LS, JSON.stringify(entries)); } catch(e){} }
 function lsLoadMoves(){ try { return JSON.parse(localStorage.getItem(LSM)||'[]'); } catch(e){ return []; } }
 function lsSaveMoves(){ try { localStorage.setItem(LSM, JSON.stringify(moves)); } catch(e){} }
+function lsLoadSettings(){ try { return mergeSettings(JSON.parse(localStorage.getItem(LSS)||'null')); } catch(e){ return mergeSettings(null); } }
+function lsSaveSettings(){ try { localStorage.setItem(LSS, JSON.stringify(settings)); } catch(e){} }
 const fromRow = r => ({id:r.id, date:r.date, sport:r.sport, dur:r.dur, dist:r.dist==null?null:+r.dist, hr:r.hr, rpe:r.rpe, title:r.title||'', note:r.note||'', ts:Date.parse(r.created_at)||0, sets:r.sets||null});
 
 async function loadEntries(){
@@ -613,36 +693,57 @@ async function loadEntries(){
   const {data, error} = await sb.from('entries').select('*').order('date',{ascending:true});
   if (error){ online=false; setSync(); return; }
   entries = data.map(fromRow); online = true; lsSave();
-  await loadMoves(); setSync(); render();
+  await Promise.all([loadMoves(), loadSettings()]); setSync(); render();
 }
 async function loadMoves(){
-  const {data, error} = await sb.from('moves').select('from_date,idx,to_date');
+  let {data, error} = await sb.from('moves').select('from_date,idx,to_date,alt');
+  if (error) ({data, error} = await sb.from('moves').select('from_date,idx,to_date')); // alt-sarake puuttuu
   if (error) return; // taulu puuttuu tai ei yhteyttä: käytetään välimuistia
-  moves = data.map(r => ({from:r.from_date, idx:r.idx, to:r.to_date})); lsSaveMoves();
+  moves = data.map(r => ({from:r.from_date, idx:r.idx, to:r.to_date, alt:r.alt||null})); lsSaveMoves();
+}
+async function loadSettings(){
+  const {data, error} = await sb.from('settings').select('data').maybeSingle();
+  if (error || !data) return;
+  settings = mergeSettings(data.data); lsSaveSettings();
+}
+const SQL3_HINT = 'Tallennus epäonnistui. Jos et ole vielä ajanut paivitys-3-hybridi.sql:ää Supabasessa, aja se.';
+async function saveSettings(){
+  lsSaveSettings();
+  const {error} = await sb.from('settings').upsert({user_id:session.user.id, data:settings, updated_at:new Date().toISOString()}, {onConflict:'user_id'});
+  if (error){ toast(SQL3_HINT); return false; }
+  return true;
 }
 const MOVES_SQL_HINT = 'Siirto epäonnistui. Jos et ole vielä ajanut paivitys-2-siirrot.sql:ää Supabasessa, aja se.';
-async function moveItem(x, to){
-  if (to===x.at){
+// Ohjelman treenin muutos: patch = {to} siirtää, {alt} vaihtaa. Rivi poistetaan, kun treeni on taas alkuperäinen.
+async function changeItem(x, patch, hint){
+  const m = {...(moveOf(x.at, x.ai) || {from:x.at, idx:x.ai, to:x.at, alt:null}), ...patch};
+  const rest = moves.filter(o => !(o.from===x.at && o.idx===x.ai));
+  if (m.to===m.from && !m.alt){
     const {error} = await sb.from('moves').delete().eq('from_date', x.at).eq('idx', x.ai);
-    if (error){ toast(MOVES_SQL_HINT); return false; }
-    moves = moves.filter(m => !(m.from===x.at && m.idx===x.ai));
+    if (error){ toast(hint); return false; }
+    moves = rest;
   } else {
-    const {error} = await sb.from('moves').upsert({user_id:session.user.id, from_date:x.at, idx:x.ai, to_date:to}, {onConflict:'user_id,from_date,idx'});
-    if (error){ toast(MOVES_SQL_HINT); return false; }
-    moves = moves.filter(m => !(m.from===x.at && m.idx===x.ai)).concat({from:x.at, idx:x.ai, to});
+    const row = {user_id:session.user.id, from_date:m.from, idx:m.idx, to_date:m.to};
+    if (m.alt || moveOf(x.at, x.ai)?.alt) row.alt = m.alt;
+    const {error} = await sb.from('moves').upsert(row, {onConflict:'user_id,from_date,idx'});
+    if (error){ toast(hint); return false; }
+    moves = rest.concat(m);
   }
   lsSaveMoves(); return true;
 }
+const moveItem = (x, to) => changeItem(x, {to}, MOVES_SQL_HINT);
+const swapItem = (x, alt) => changeItem(x, {alt}, SQL3_HINT);
 let channel = null;
 function subscribe(){
   if (channel) return;
   channel = sb.channel('entries-sync')
     .on('postgres_changes', {event:'*', schema:'public', table:'entries'}, () => loadEntries())
     .on('postgres_changes', {event:'*', schema:'public', table:'moves'}, () => loadEntries())
+    .on('postgres_changes', {event:'*', schema:'public', table:'settings'}, () => loadEntries())
     .subscribe();
 }
 async function initApp(){
-  entries = lsLoad(); moves = lsLoadMoves();
+  entries = lsLoad(); moves = lsLoadMoves(); settings = lsLoadSettings();
   if (!configured || !window.supabase){ _render(); setSync(); return; }
   sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
   const {data} = await sb.auth.getSession();
@@ -650,7 +751,7 @@ async function initApp(){
   sb.auth.onAuthStateChange((_e, s) => {
     const was = !!session; session = s;
     if (s && !was){ loadEntries(); subscribe(); }
-    if (!s){ entries = []; lsSave(); moves = []; lsSaveMoves(); }
+    if (!s){ entries = []; lsSave(); moves = []; lsSaveMoves(); settings = mergeSettings(null); lsSaveSettings(); }
     _render(); setSync();
   });
   _render(); setSync();
@@ -779,13 +880,127 @@ function workoutCard(x,k,i,doneSports){
   return `<div class="wo ${isDone?'isdone':''}">
     <div class="bar" style="background:${sp.c}"></div>
     <button class="open" data-open="${k}|${i}"><div class="sport" style="color:${sp.c}">${sp.n}${x.d?` · ${hm(x.d)}`:''}</div>
-      <h3>${esc(x.t)}</h3>${x.z?`<div class="det">${esc(x.z)}</div>`:''}${x.at!==k?`<div class="det">Siirretty päivältä ${DN[wd(x.at)]} ${fmt(x.at)}</div>`:''}<span class="more">Näytä sisältö</span></button>
+      <h3>${esc(x.t)}</h3>${x.z?`<div class="det">${esc(x.z)}</div>`:''}${x.orig?`<div class="det">Vaihdettu: ${esc(x.orig)}</div>`:''}${x.at!==k?`<div class="det">Siirretty päivältä ${DN[wd(x.at)]} ${fmt(x.at)}</div>`:''}<span class="more">Näytä sisältö</span></button>
     ${canLog ? (isDone ? `<span class="btn done" aria-label="Kirjattu">✓ Tehty</span>`
       : `<button class="btn primary" data-do="${k}|${i}">Kirjaa</button>`) : ''}
   </div>`;
 }
 
+/* ---------- Hybridi-tila ---------- */
+const modeSeg = () => `<div class="seg" role="group" aria-label="Tila">${[['norseman','Norseman'],['hybrid','Hybridi']].map(([m,n]) => `<button type="button" data-mode="${m}" aria-pressed="${settings.mode===m}">${n}</button>`).join('')}</div>`;
+function bindMode(){
+  $view.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => {
+    if (settings.mode===b.dataset.mode) return;
+    settings = {...settings, mode:b.dataset.mode}; render(); saveSettings();
+  });
+}
+const catOf = e => e.sport==='str' ? 'str' : e.sport==='func' ? 'func' : 'end';
+function hybWeek(mon){
+  const h = {str:0, func:0, end:0, endMin:0};
+  for (let i=0;i<7;i++) entriesOn(addDays(mon,i)).forEach(e => { const c = catOf(e); h[c]++; if (c==='end') h.endMin += +e.dur||0; });
+  return h;
+}
+const hybMet = (h,t) => h.str>=t.str && h.func>=t.func && h.end>=t.end && h.endMin>=t.endMin;
+function hybGoalHtml(mon, isNow){
+  const t = settings.targets, h = hybWeek(mon);
+  const pips = (n, of, c) => `<div class="pips" style="--c:${c}">${Array.from({length:Math.max(of,n)}, (_,i) => `<span class="pip${i<n?' on':''}"></span>`).join('')}</div>`;
+  const row = (key, extra='') => t[key] ? `<div class="hg-row"><span>${HCAT[key].n}</span><div>${pips(h[key], t[key], HCAT[key].c)}${extra}</div><b>${h[key]}/${t[key]}</b></div>` : '';
+  const pct = t.endMin ? Math.min(100, Math.round(h.endMin/t.endMin*100)) : 0;
+  const endBar = t.endMin ? `<div class="small muted" style="margin-top:4px">${hm(h.endMin)} / ${hm(t.endMin)}</div><div class="mbar" style="--c:${HCAT.end.c}"><i style="width:${pct}%"></i></div>` : '';
+  let hist = 0, weeks = 0;
+  for (let w=1; w<=4; w++){ const m = addDays(mon,-7*w); if (m < '2026-10-05') break; weeks++; if (hybMet(hybWeek(m), t)) hist++; }
+  const left = ['str','func','end'].map(c => Math.max(0, t[c]-h[c]) ? `${t[c]-h[c]} × ${HCAT[c].n.toLowerCase()}` : '').filter(Boolean);
+  return `<section class="hgoal">
+    <div class="top"><h3>${isNow?'Tämän viikon tavoite':'Viikon tavoite'}</h3><button class="btn" id="hgEdit" style="min-height:32px;padding:2px 10px">Muokkaa</button></div>
+    ${row('str')}${row('func')}${row('end', endBar)}
+    <p class="small" style="margin:10px 0 0">${hybMet(h,t) ? '<b style="color:var(--done)">Viikon tavoite täynnä ✓</b> Kaikki tästä eteenpäin on bonusta.' : left.length ? `Vielä: ${left.join(', ')}${h.endMin<t.endMin?` · kestävyyttä ${hm(t.endMin-h.endMin)}`:''}` : `Kestävyyttä vielä ${hm(t.endMin-h.endMin)}`}${weeks?` <span class="muted">· tavoite täyttyi ${hist}/${weeks} edellistä viikkoa</span>`:''}</p>
+  </section>`;
+}
+function bindGoalEdit(){ const b = document.getElementById('hgEdit'); if (b) b.onclick = openTargets; }
+function openTargets(){
+  const t = settings.targets, body = document.getElementById('dlgBody');
+  const f = (k, label, step=1) => `<label>${label}<input type="number" inputmode="numeric" min="0" step="${step}" name="${k}" value="${t[k]}"></label>`;
+  body.innerHTML = `<div class="top"><h2 id="dlgT">Viikkotavoite</h2><button class="btn" id="dlgX" aria-label="Sulje">✕</button></div>
+    <p class="muted">Montako kertaa viikossa? Teet treenit missä järjestyksessä haluat.</p>
+    <form id="tf" novalidate><div class="row">${f('str','Perus punttis (krt)')}${f('func','Toiminnallinen (krt)')}</div>
+    <div class="row">${f('end','Kestävyys (krt)')}${f('endMin','Kestävyys yhteensä (min)',15)}</div>
+    <div class="acts"><button class="btn primary" type="submit">Tallenna</button><button class="btn" type="button" id="dlgC">Peruuta</button></div></form>`;
+  const dlg = document.getElementById('dlg');
+  document.getElementById('dlgX').onclick = document.getElementById('dlgC').onclick = () => dlg.close();
+  document.getElementById('tf').onsubmit = async ev => {
+    ev.preventDefault(); const fm = ev.target, n = k => Math.max(0, Math.round(+fm[k].value||0));
+    settings = {...settings, targets:{str:n('str'), func:n('func'), end:n('end'), endMin:n('endMin')}};
+    dlg.close(); render(); if (await saveSettings()) toast('Tavoite tallennettu');
+  };
+  dlg.showModal();
+}
+function libCard(w,k){
+  const c = HCAT[w.cat], done = entriesOn(k).some(e => e.title===w.t);
+  return `<div class="wo ${done?'isdone':''}"><div class="bar" style="background:${c.c}"></div>
+    <button class="open" data-lib="${w.id}"><div class="sport" style="color:${c.c}">${SPORT[w.s].n} · ${hm(w.d)}</div><h3>${esc(w.t)}</h3>${w.z?`<div class="det">${esc(w.z)}</div>`:''}<span class="more">Näytä sisältö</span></button>
+    ${done ? '<span class="btn done">✓ Tehty</span>' : `<button class="btn primary" data-libdo="${w.id}">Kirjaa</button>`}</div>`;
+}
+function openLib(id, k){
+  const w = libById(id); if (!w) return;
+  const d = libDetail(w), c = HCAT[w.cat], body = document.getElementById('dlgBody');
+  body.innerHTML = `<div class="top"><div><div class="sport" style="color:${c.c};font-weight:600;font-size:.85rem">${c.n} · ${SPORT[w.s].n} · ${hm(w.d)}</div>
+    <h2 id="dlgT">${esc(w.t)}</h2>${w.z?`<div class="muted">${esc(w.z)}</div>`:''}</div><button class="btn" id="dlgX" aria-label="Sulje">✕</button></div>
+    <p>${d.intro}</p>${d.secs.map(x=>`<h3>${x.h}</h3>${x.body}`).join('')}
+    <div class="acts"><button class="btn primary" id="dlgLog">Kirjaa tämä suoritus</button>${/^c/.test(w.id)?'<button class="btn" id="dlgDel">Poista oma treeni</button>':''}<button class="btn" id="dlgC">Sulje</button></div>`;
+  const dlg = document.getElementById('dlg');
+  document.getElementById('dlgX').onclick = document.getElementById('dlgC').onclick = () => dlg.close();
+  document.getElementById('dlgLog').onclick = () => startLogItem(libItem(w), k);
+  const del = document.getElementById('dlgDel');
+  if (del) del.onclick = async () => { settings = {...settings, custom:settings.custom.filter(x => x.id!==w.id)}; dlg.close(); render(); if (await saveSettings()) toast('Oma treeni poistettu'); };
+  dlg.showModal(); body.scrollTop = 0; dlg.scrollTop = 0;
+}
+function openCustom(){
+  const body = document.getElementById('dlgBody');
+  body.innerHTML = `<div class="top"><h2 id="dlgT">Oma treeni</h2><button class="btn" id="dlgX" aria-label="Sulje">✕</button></div>
+    <form id="cf" novalidate>
+      <label>Nimi<input name="t" required placeholder="esim. Salibandy, Sali A, Lenkki koiran kanssa"></label>
+      <div class="row"><label>Tyyppi<select name="cat">${Object.entries(HCAT).map(([k,c]) => `<option value="${k}">${c.n}</option>`).join('')}</select></label>
+        <label>Laji kirjaukseen<select name="s">${LOGSPORTS.map(x => `<option value="${x}">${SPORT[x].n}</option>`).join('')}</select></label></div>
+      <div class="row"><label>Kesto (min)<input type="number" name="d" inputmode="numeric" min="5" max="600" value="45"></label>
+        <label>Teho<input name="z" placeholder="esim. RPE 6, syke ≤ 140"></label></div>
+      <label>Sisältö<textarea name="desc" placeholder="Liikkeet, kierrokset, muistiinpanot…"></textarea></label>
+      <div class="acts"><button class="btn primary" type="submit">Lisää kirjastoon</button><button class="btn" type="button" id="dlgC">Peruuta</button></div>
+    </form>`;
+  const dlg = document.getElementById('dlg'), fm = document.getElementById('cf');
+  const sync = () => { fm.s.value = {str:'str', func:'func', end:'run'}[fm.cat.value]; };
+  fm.cat.onchange = sync; sync();
+  document.getElementById('dlgX').onclick = document.getElementById('dlgC').onclick = () => dlg.close();
+  fm.onsubmit = async ev => {
+    ev.preventDefault();
+    const t = fm.t.value.trim(); if (!t){ toast('Anna treenille nimi.'); return; }
+    const w = {id:'c'+Date.now().toString(36), cat:fm.cat.value, s:fm.s.value, t, d:Math.max(5, +fm.d.value||45), z:fm.z.value.trim(), desc:fm.desc.value.trim(), p:HCAT_P[fm.cat.value]};
+    settings = {...settings, custom:[...settings.custom, w]};
+    dlg.close(); render(); if (await saveSettings()) toast('Oma treeni lisätty');
+  };
+  dlg.showModal(); fm.t.focus();
+}
+function renderHybridToday(){
+  const k = todayKey(), mon = monday(k), t = settings.targets, h = hybWeek(mon), logged = entriesOn(k);
+  // Eniten puuttuva treenityyppi ensin
+  const order = ['str','func','end'].sort((a,b) => (t[b]-h[b]) - (t[a]-h[a]));
+  const all = libAll();
+  $view.innerHTML = `
+    ${modeSeg()}
+    <p class="muted small" style="margin:14px 0 0">${DNL[wd(k)]}</p>
+    <p class="datebig">${fmtY(k)}</p>
+    <p class="phase">Joustava hybridi: valitse treeni fiiliksen mukaan, kunhan viikon tavoite täyttyy.</p>
+    ${hybGoalHtml(mon, true)}
+    ${order.map(c => { const ws = all.filter(w => w.cat===c); return ws.length ? `<div class="libh"><span class="dot" style="background:${HCAT[c].c}"></span><h3>${HCAT[c].n}</h3>${t[c]>h[c]?`<span class="badge">vielä ${t[c]-h[c]}</span>`:''}</div><div class="day-list" style="margin-top:0">${ws.map(w => libCard(w,k)).join('')}</div>` : ''; }).join('')}
+    <button class="btn" id="addCustom" style="margin-top:16px;width:100%">+ Oma treeni</button>
+    ${logged.length ? `<section class="logged"><h2>Tänään kirjattu</h2><ul>${logged.map(e=>`<li><b>${SPORT[e.sport]?.n||e.sport}</b>${e.title?` ${esc(e.title)}`:''} ${hm(+e.dur||0)}${e.dist?` · ${e.dist} km`:''}${e.rpe?` · RPE ${e.rpe}`:''}${setsSummary(e)}</li>`).join('')}</ul></section>`:''}`;
+  bindMode(); bindGoalEdit();
+  $view.querySelectorAll('[data-lib]').forEach(b => b.onclick = () => openLib(b.dataset.lib, k));
+  $view.querySelectorAll('[data-libdo]').forEach(b => b.onclick = () => startLogItem(libItem(libById(b.dataset.libdo)), k));
+  document.getElementById('addCustom').onclick = openCustom;
+}
+
 function renderToday(){
+  if (settings.mode==='hybrid') return renderHybridToday();
   const k = todayKey();
   const started = k >= PLAN_START;
   const showK = started ? k : PLAN_START;
@@ -799,6 +1014,7 @@ function renderToday(){
   const wk = weekKmTarget(monday(showK));
   const logged = entriesOn(k);
   $view.innerHTML = `
+  ${modeSeg()}
   <section class="hero">
     <div class="meta">
       <div>
@@ -818,11 +1034,11 @@ function renderToday(){
   ${logged.length ? `<section class="logged"><h2>Tänään kirjattu</h2><ul>${logged.map(e=>`<li><b>${SPORT[e.sport]?.n||e.sport}</b> ${hm(+e.dur||0)}${e.dist?` · ${e.dist} km`:''}${paceStr(e)?` · ${paceStr(e)}`:''}${e.rpe?` · RPE ${e.rpe}`:''}${setsSummary(e)}</li>`).join('')}</ul></section>`:''}
   `;
   $view.querySelectorAll('[data-do]').forEach(b => b.onclick = () => { const [dk,i] = b.dataset.do.split('|'); startLog(dk,+i); });
-  bindOpen();
+  bindOpen(); bindMode();
 }
 
-function startLog(dk,i){
-  const x = planFor(dk).items[i];
+function startLog(dk,i){ startLogItem(planFor(dk).items[i], dk); }
+function startLogItem(x, dk){
   let ex = null;
   if (x.s==='str'){ const d = detailFor(x,x.at,x.al); if (d.ex) ex = d.ex.map(r => ({name:r[0], rx:r[1], load:r[2]||'', n: x.al ? 2 : setCount(r[1])})); }
   prefill = {date: dk < todayKey() || dk===todayKey() ? dk : todayKey(), sport:x.s==='race'?'run':x.s, dur:x.d||'', dist:x.k||'', title:x.t, ex};
@@ -839,14 +1055,33 @@ function openDetail(k,i){
     <button class="btn" id="dlgX" aria-label="Sulje">✕</button></div>
     <p>${d.intro}</p>
     ${d.secs.map(s=>`<h3>${s.h}</h3>${s.body}`).join('')}
+    ${x.orig?`<p class="muted small">Vaihdettu ohjelman treenistä: ${esc(x.orig)}.</p>`:''}
     ${x.at!==k?`<p class="muted small">Siirretty päivältä ${DN[wd(x.at)]} ${fmt(x.at)}.</p>`:''}
-    <div class="acts">${x.s!=='rest'?`<button class="btn primary" id="dlgLog">Kirjaa tämä suoritus</button>`:''}${x.s!=='race'?`<button class="btn" id="dlgMv">Siirrä</button>`:''}<button class="btn" id="dlgC">Sulje</button></div>
+    <div class="acts">${x.s!=='rest'?`<button class="btn primary" id="dlgLog">Kirjaa tämä suoritus</button>`:''}${x.s!=='race'?`<button class="btn" id="dlgMv">Siirrä</button>`:''}${x.s!=='race'&&x.s!=='rest'?`<button class="btn" id="dlgSw">Vaihda</button>`:''}<button class="btn" id="dlgC">Sulje</button></div>
     <div id="mvBox" hidden></div>`;
   const dlg = document.getElementById('dlg');
   document.getElementById('dlgX').onclick = document.getElementById('dlgC').onclick = () => dlg.close();
   const l = document.getElementById('dlgLog'); if (l) l.onclick = () => startLog(k,i);
   const mv = document.getElementById('dlgMv'); if (mv) mv.onclick = () => showMovePicker(x,k);
+  const sw = document.getElementById('dlgSw'); if (sw) sw.onclick = () => showSwapPicker(x);
   dlg.showModal(); body.scrollTop = 0; dlg.scrollTop = 0;
+}
+function showSwapPicker(x){
+  const box = document.getElementById('mvBox');
+  const base = x.orig ? basePlan(x.at).items[x.ai] : x;
+  const pp = purposeOf(base), all = libAll();
+  const btn = w => `<button data-alt="${w.id}"><span class="dot" style="background:${HCAT[w.cat].c}"></span><span>${esc(w.t)}<br><small>${HCAT[w.cat].n}${w.z?' · '+esc(w.z):''}</small></span><small>${hm(w.d)}</small></button>`;
+  const same = all.filter(w => (w.p||HCAT_P[w.cat]).includes(pp) && w.id!==x.lib);
+  const other = all.filter(w => !same.includes(w) && w.id!==x.lib);
+  box.innerHTML = `<h3>Vaihda treeni</h3>
+    ${x.orig?`<div class="swl"><button data-alt=""><span class="dot" style="background:${SPORT[base.s].c}"></span><span>Palauta ohjelman treeni<br><small>${esc(base.t)}</small></span><small>${hm(base.d)}</small></button></div>`:''}
+    <p class="muted small" style="margin:8px 0 0">Sama tarkoitus</p><div class="swl">${same.map(btn).join('')}</div>
+    <details><summary class="small" style="cursor:pointer;color:var(--fjord);font-weight:600;min-height:32px">Muut treenit (${other.length})</summary><div class="swl">${other.map(btn).join('')}</div></details>`;
+  box.hidden = false; box.scrollIntoView({block:'nearest', behavior:'smooth'});
+  box.querySelectorAll('[data-alt]').forEach(b => b.onclick = async () => {
+    const alt = b.dataset.alt || null;
+    if (await swapItem(x, alt)){ document.getElementById('dlg').close(); toast(alt ? `Vaihdettu: ${libById(alt).t}` : 'Ohjelman treeni palautettu'); render(); }
+  });
 }
 function showMovePicker(x,k){
   const box = document.getElementById('mvBox'), mon = monday(k);
@@ -868,27 +1103,33 @@ document.getElementById('dlg').addEventListener('click', e => { if (e.target.id=
 function renderWeek(){
   const mon = addDays(monday(todayKey()), weekOff*7);
   const s = weekStats(mon), tgt = weekKmTarget(mon), t = todayKey();
-  const ph = phaseOf(mon);
+  const ph = phaseOf(mon), hyb = settings.mode==='hybrid';
   let rows = '';
-  for (let i=0;i<7;i++){
+  for (let i=0;i<7 && hyb;i++){
+    const k = addDays(mon,i), done = entriesOn(k);
+    const list = done.map(e => `<div class="pl"><span class="dot" style="background:${SPORT[e.sport]?.c||'var(--muted)'}"></span><span>${esc(e.title||SPORT[e.sport]?.n||'')} <span class="muted small">${hm(+e.dur||0)}</span></span><span class="chk">✓</span></div>`).join('');
+    rows += `<div class="wkday ${k===t?'today':''}"><div class="dn">${DN[i]}<small>${fmt(k)}</small></div><div>${list||'<span class="muted small">–</span>'}</div></div>`;
+  }
+  for (let i=0;i<7 && !hyb;i++){
     const k = addDays(mon,i), p = planFor(k), done = entriesOn(k), ds = new Set(done.map(e=>e.sport));
-    const plan = p.items.map((x,ii) => `<div class="pl"><span class="dot" style="background:${SPORT[x.s].c}"></span><span><button class="open" data-open="${k}|${ii}">${esc(x.t)}</button>${x.d?` <span class="muted small">${hm(x.d)}</span>`:''}${x.at!==k?` <span class="muted small">↷ ${DN[wd(x.at)]}</span>`:''}</span>${ds.has(x.s)?'<span class="chk" aria-label="tehty">✓</span>':''}</div>`).join('');
+    const plan = p.items.map((x,ii) => `<div class="pl"><span class="dot" style="background:${SPORT[x.s].c}"></span><span><button class="open" data-open="${k}|${ii}">${esc(x.t)}</button>${x.d?` <span class="muted small">${hm(x.d)}</span>`:''}${x.at!==k?` <span class="muted small">↷ ${DN[wd(x.at)]}</span>`:''}${x.orig?' <span class="muted small" title="Vaihdettu">⇄</span>':''}</span>${ds.has(x.s)?'<span class="chk" aria-label="tehty">✓</span>':''}</div>`).join('');
     const extra = done.filter(e => !p.items.some(x=>x.s===e.sport)).map(e => `<div class="pl"><span class="dot" style="background:${SPORT[e.sport]?.c||'var(--muted)'}"></span><span class="muted">+ ${SPORT[e.sport]?.n||''} ${hm(+e.dur||0)}</span><span class="chk">✓</span></div>`).join('');
     rows += `<div class="wkday ${k===t?'today':''}"><div class="dn">${DN[i]}<small>${fmt(k)}</small></div><div>${plan||'<span class="muted small">Ei suunnitelmaa</span>'}${extra}</div></div>`;
   }
   $view.innerHTML = `
+    ${modeSeg()}
     <div class="weeknav">
       <button class="btn" id="prev" aria-label="Edellinen viikko">‹</button>
       <h2>${fmt(mon)}–${fmtY(addDays(mon,6))}</h2>
       <button class="btn" id="next" aria-label="Seuraava viikko">›</button>
     </div>
-    <p class="muted small" style="text-align:center;margin:6px 0 0">${ph?esc(ph.n):''}${weekOff?` · <button class="btn" id="now" style="min-height:32px;padding:2px 10px">Tämä viikko</button>`:''}</p>
-    <div class="wksum">
+    <p class="muted small" style="text-align:center;margin:6px 0 0">${hyb?'Hybridi':ph?esc(ph.n):''}${weekOff?` · <button class="btn" id="now" style="min-height:32px;padding:2px 10px">Tämä viikko</button>`:''}</p>
+    ${hyb ? hybGoalHtml(mon, weekOff===0) : `<div class="wksum">
       <div><b>${hm(s.done)}</b> <span class="muted">/ ${hm(s.plan)} suunniteltu</span></div>
       <div><b>${s.km} km</b> <span class="muted">juoksua${tgt?` / ${tgt} km`:''}</span></div>
-    </div>
+    </div>`}
     <div style="margin-top:8px">${rows}</div>`;
-  bindOpen();
+  bindOpen(); bindMode(); bindGoalEdit();
   document.getElementById('prev').onclick = () => { weekOff--; render(); };
   document.getElementById('next').onclick = () => { weekOff++; render(); };
   const n = document.getElementById('now'); if (n) n.onclick = () => { weekOff=0; render(); };

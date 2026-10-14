@@ -23,6 +23,11 @@ Every morning the app shows the day's workout from the plan. I log what I actual
 **Daily plan**
 - Shows today's workouts from a training plan running from October 2026 to August 2030, with phases, 3:1 load/recovery weeks, tapers and race days.
 - An elevation-profile progress bar shows where I am on the road to Norseman, with the key races marked.
+- The plan bends: any workout can be moved to another day or swapped for an alternative from the workout library with the same purpose (easy aerobic, quality, long, strength).
+
+**Hybrid mode**
+- A second, more relaxed mode next to the Norseman plan: no fixed daily schedule, just weekly targets (strength, functional, endurance sessions and endurance minutes) and a workout library to pick from.
+- The library covers basic gym strength, functional/HYROX-style circuits and endurance work (Z2, rowing/SkiErg, rucking, threshold intervals), and you can add your own workouts.
 
 **Workout content**
 - Every workout opens into its full content: warm-up, main set, intensities (heart-rate zones, paces, % of max), and tips.
@@ -60,7 +65,7 @@ Developed with AI-assisted tooling (Claude).
 ```
 Phone / computer  ──►  GitHub Pages (app)  ──►  Supabase
                                                  ├─ Auth (email + password)
-                                                 ├─ PostgreSQL: entries table (RLS)
+                                                 ├─ PostgreSQL: entries, moves, settings (RLS)
                                                  └─ Realtime sync between devices
 ```
 
@@ -85,6 +90,7 @@ The app would only use the data of the athlete who has authorized it.
 - [x] Progress charts and cross-device sync
 - [ ] Garmin Activity API: automatic workout import
 - [ ] Garmin Training API: planned workouts to the watch
+- [x] Moving and swapping workouts, hybrid mode
 - [ ] Editing the plan inside the app
 - [ ] Support for other athletes and their own plans
 
