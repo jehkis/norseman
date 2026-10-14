@@ -925,12 +925,22 @@ function setRow(i,j){
     <input type="number" inputmode="numeric" min="0" placeholder="toistot" aria-label="Sarja ${j+1} toistot" data-reps></div>`;
 }
 
+// Keskeneräinen kirjaus säilyy, kun välilehteä vaihdetaan tai sovellus suljetaan.
+const LSD = 'norseman-log-draft-v1';
+function draftLoad(){ try { return JSON.parse(localStorage.getItem(LSD)||'null'); } catch(e){ return null; } }
+function draftSave(d){ try { localStorage.setItem(LSD, JSON.stringify(d)); } catch(e){} }
+function draftClear(){ try { localStorage.removeItem(LSD); } catch(e){} }
 function renderLog(){
-  const f = prefill || {date:todayKey(), sport:'run', dur:'', dist:'', title:''};
+  // Jatketaan luonnosta, jos kirjausta ei aloitettu toisesta treenistä.
+  let d = draftLoad();
+  if (d && prefill && (prefill.title!==d.orig.title || prefill.date!==d.orig.date)) d = null;
+  const orig = d ? d.orig : (prefill || {date:todayKey(), sport:'run', dur:'', dist:'', title:''});
+  const f = d ? {...orig, date:d.vals.date, dur:d.vals.dur, dist:d.vals.dist} : orig;
   prefill = null;
-  let sport = f.sport, rpe = null;
+  let sport = d ? d.sport : f.sport, rpe = d ? d.rpe : null;
   $view.innerHTML = `
   <h2>Kirjaa suoritus</h2>
+  ${d?`<p class="note small" style="margin-top:-4px">Jatketaan keskeneräistä kirjausta. <button type="button" class="btn" id="fresh" style="min-height:32px;padding:2px 10px">Aloita alusta</button></p>`:''}
   ${f.title?`<p class="muted" style="margin-top:-6px">Suunniteltu: ${esc(f.title)}</p>`:''}
   <form id="f" novalidate>
     <div class="sports" role="group" aria-label="Laji">${LOGSPORTS.map(s=>`<button type="button" data-s="${s}" aria-pressed="${s===sport}">${SPORT[s].n}</button>`).join('')}</div>
@@ -951,12 +961,12 @@ function renderLog(){
       <button type="button" class="btn" id="addex">+ Lisää liike</button>
     </section>
     <div><label style="margin-bottom:6px">Rasitus (RPE 1–10)</label>
-      <div class="rpe" role="group" aria-label="Rasitus">${[1,2,3,4,5,6,7,8,9,10].map(n=>`<button type="button" data-r="${n}" aria-pressed="false">${n}</button>`).join('')}</div></div>
+      <div class="rpe" role="group" aria-label="Rasitus">${[1,2,3,4,5,6,7,8,9,10].map(n=>`<button type="button" data-r="${n}" aria-pressed="${n===rpe}">${n}</button>`).join('')}</div></div>
     <label>Muistiinpano<textarea name="note" placeholder="Miltä tuntui, kadenssi, sää…"></textarea></label>
     <button class="btn primary" type="submit">Tallenna suoritus</button>
   </form>`;
   const form = document.getElementById('f');
-  let exs = (f.ex && f.ex.length) ? f.ex : [{name:'', n:3}];
+  let exs = d ? d.exs : (f.ex && f.ex.length) ? f.ex : [{name:'', n:3}];
   const exlist = document.getElementById('exlist');
   const drawEx = () => { exlist.innerHTML = exs.map((x,i)=>exBlock(x,i,form.date.value||todayKey())).join(''); };
   drawEx();
@@ -991,7 +1001,19 @@ function renderLog(){
   };
   form.querySelectorAll('[data-s]').forEach(b => b.onclick = () => { sport=b.dataset.s; form.querySelectorAll('[data-s]').forEach(x=>x.setAttribute('aria-pressed',x===b)); upd(); });
   form.querySelectorAll('[data-r]').forEach(b => b.onclick = () => { rpe=+b.dataset.r; form.querySelectorAll('[data-r]').forEach(x=>x.setAttribute('aria-pressed',x===b)); upd(); });
-  form.dur.oninput = form.dist.oninput = upd; upd();
+  form.dur.oninput = form.dist.oninput = upd;
+  if (d){ snap = d.snap; restoreEx(); form.hr.value = d.vals.hr||''; form.note.value = d.vals.note||''; }
+  upd();
+  const saveDraft = () => {
+    collectEx();
+    const counts = [...exlist.querySelectorAll('fieldset.ex')].map(fs => fs.querySelectorAll('.setrow').length);
+    draftSave({orig, sport, rpe, snap,
+      exs: exs.map((x,i) => ({...x, n: counts[i]||x.n})),
+      vals:{date:form.date.value, dur:form.dur.value, dist:form.dist.value, hr:form.hr.value, note:form.note.value}});
+  };
+  form.addEventListener('input', saveDraft);
+  form.addEventListener('click', () => setTimeout(saveDraft));
+  const fr = document.getElementById('fresh'); if (fr) fr.onclick = () => { draftClear(); prefill = orig.title ? orig : null; _render(); };
   form.onsubmit = async ev => {
     ev.preventDefault();
     const dur = +form.dur.value;
@@ -999,7 +1021,7 @@ function renderLog(){
     const e = {date:form.date.value, sport, dur, dist: (sport==='str'||sport==='free') ? null : (+form.dist.value||null), hr:+form.hr.value||null, rpe, title:f.title||'', note:form.note.value.trim()};
     if (sport==='str'){ const st = readSets(); if (st.length) e.sets = st; }
     const btn = form.querySelector('[type=submit]'); btn.disabled = true;
-    if (await addEntry(e)){ toast('Suoritus tallennettu'); go(e.date===todayKey()?'today':'week'); }
+    if (await addEntry(e)){ draftClear(); toast('Suoritus tallennettu'); go(e.date===todayKey()?'today':'week'); }
     btn.disabled = false;
   };
 }
