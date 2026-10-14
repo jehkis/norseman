@@ -750,14 +750,70 @@ async function initApp(){
   session = data.session;
   sb.auth.onAuthStateChange((_e, s) => {
     const was = !!session; session = s;
-    if (s && !was){ loadEntries(); subscribe(); }
+    if (s && !was){ loadEntries(); subscribe(); stravaSync(); }
     if (!s){ entries = []; lsSave(); moves = []; lsSaveMoves(); settings = mergeSettings(null); lsSaveSettings(); }
     _render(); setSync();
   });
   _render(); setSync();
-  if (session){ loadEntries(); subscribe(); }
-  document.addEventListener('visibilitychange', () => { if (document.visibilityState==='visible') loadEntries(); });
+  if (session){ loadEntries(); subscribe(); stravaReturn(); stravaSync(); }
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState==='visible'){ loadEntries(); stravaSync(); } });
 }
+/* ---------- Strava ---------- */
+// Palvelinfunktio (supabase/functions/strava) hoitaa kirjautumisen ja tuonnin; selain ei näe Stravan avaimia.
+let strava = null;   // null = ei tiedossa, muuten {connected, added, merged, error}
+const STRAVA_LAST = 'norseman-strava-last';
+async function stravaCall(action){
+  try {
+    const {data} = await sb.auth.getSession();
+    const r = await fetch(`${SUPABASE_URL}/functions/v1/strava?action=${action}`, {method:'POST', headers:{Authorization:`Bearer ${data.session?.access_token}`, apikey:SUPABASE_KEY}});
+    return await r.json().catch(() => ({error:`Strava-funktio vastasi ${r.status}`}));
+  } catch(e){ return {error:'Strava-funktioon ei saatu yhteyttä.'}; }
+}
+// Tuo uudet suoritukset korkeintaan kerran 10 minuutissa, ellei pyydetä heti.
+async function stravaSync(force, quiet){
+  if (!sb || !session) return;
+  if (!force){ try { if (Date.now() - (+localStorage.getItem(STRAVA_LAST)||0) < 10*60e3) return; } catch(e){} }
+  try { localStorage.setItem(STRAVA_LAST, String(Date.now())); } catch(e){}
+  const res = await stravaCall('sync');
+  strava = res;
+  if (res.added || res.merged){ toast(`Stravasta ${res.added} uutta suoritusta${res.merged?`, ${res.merged} täydennetty`:''}`); await loadEntries(); }
+  else if (force && !quiet && res.connected) toast('Strava on ajan tasalla');
+  else if (force && !quiet && res.error) toast(res.error);
+  if (tab==='progress') _render();
+}
+async function stravaConnect(){
+  const res = await stravaCall('start');
+  if (res.url) location.href = res.url; else toast(res.error || 'Strava-yhteyden aloitus epäonnistui.');
+}
+async function stravaDisconnect(){
+  if (!confirm('Katkaistaanko Strava-yhteys? Jo tuodut suoritukset jäävät päiväkirjaan.')) return;
+  strava = await stravaCall('disconnect'); _render();
+}
+function stravaHtml(){
+  const s = strava;
+  const body = !s ? '<p class="muted small">Tarkistetaan Strava-yhteyttä…</p>'
+    : s.error && !s.connected ? `<p class="muted small">${esc(s.error)}</p><button class="btn" id="stC">Yhdistä Strava</button>`
+    : s.connected ? `<p class="small">Yhdistetty. Uudet suoritukset tuodaan automaattisesti, kun avaat sovelluksen. RPE ja voimasarjat lisätään edelleen käsin.</p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn" id="stS">Synkronoi nyt</button><button class="btn" id="stD">Katkaise yhteys</button></div>`
+    : `<p class="small">Tuo Garminin ja Stravan suoritukset automaattisesti: laji, kesto, matka ja keskisyke. Jos olet jo kirjannut saman lajin samalle päivälle, Strava vain täydentää matkan ja sykkeen.</p><button class="btn primary" id="stC">Yhdistä Strava</button>`;
+  return `<h2>Strava</h2>${body}`;
+}
+function bindStrava(){
+  const c = document.getElementById('stC'), sy = document.getElementById('stS'), d = document.getElementById('stD');
+  if (c) c.onclick = stravaConnect;
+  if (sy) sy.onclick = () => stravaSync(true);
+  if (d) d.onclick = stravaDisconnect;
+  if (!strava) stravaSync(true, true);
+}
+function stravaReturn(){
+  const q = new URLSearchParams(location.search).get('strava');
+  if (!q) return;
+  history.replaceState(null, '', location.pathname);
+  const msg = {ok:'Strava yhdistetty. Haetaan suoritukset…', peruttu:'Strava-yhteys peruttiin.', oikeudet:'Anna Stravassa lupa lukea suorituksia, muuten tuonti ei toimi.', virhe:'Strava-yhteys epäonnistui. Yritä uudelleen.'}[q];
+  if (msg) toast(msg);
+  if (q==='ok') stravaSync(true);
+}
+
 function setSync(){
   const el = document.getElementById('sync');
   if (!configured) el.textContent = 'Supabase-asetukset puuttuvat.';
@@ -1360,10 +1416,12 @@ function renderProgress(){
   </div>
   ${strengthChartHtml()}
   <h2>Kaikki suoritukset</h2>
-  ${all.length ? `<ul class="hist">${all.slice(0,60).map(e=>`<li><div><b>${fmtY(e.date)}</b> ${SPORT[e.sport]?.n||''} · ${hm(+e.dur||0)}${e.dist?` · ${e.dist} km`:''}${paceStr(e)?` · ${paceStr(e)}`:''}${e.hr?` · ♥ ${e.hr}`:''}${e.rpe?` · RPE ${e.rpe}`:''}${setsSummary(e)}${e.note?`<div class="muted small">${esc(e.note)}</div>`:''}</div><button class="del" data-del="${e.id}">Poista</button></li>`).join('')}</ul>` : '<p class="muted">Ei vielä suorituksia.</p>'}
+  ${all.length ? `<ul class="hist">${all.slice(0,60).map(e=>`<li><div><b>${fmtY(e.date)}</b> ${SPORT[e.sport]?.n||''}${/^strava-/.test(e.id)&&e.title?` <span class="muted">${esc(e.title)}</span>`:''} · ${hm(+e.dur||0)}${e.dist?` · ${e.dist} km`:''}${paceStr(e)?` · ${paceStr(e)}`:''}${e.hr?` · ♥ ${e.hr}`:''}${e.rpe?` · RPE ${e.rpe}`:''}${setsSummary(e)}${e.note?`<div class="muted small">${esc(e.note)}</div>`:''}</div><button class="del" data-del="${e.id}">Poista</button></li>`).join('')}</ul>` : '<p class="muted">Ei vielä suorituksia.</p>'}
   `;
   const ss = document.getElementById('strsel'); if (ss) ss.onchange = () => { strEx = ss.value; _render(); };
   $view.querySelectorAll('[data-del]').forEach(b => b.onclick = () => { if (confirm('Poistetaanko suoritus?')) removeEntry(b.dataset.del); });
+  $view.insertAdjacentHTML('beforeend', stravaHtml());
+  bindStrava();
   $view.insertAdjacentHTML('beforeend', `<h2>Varmuuskopio ja tili</h2>
     <p class="muted small">Tallenna varmuuskopio esimerkiksi kerran kuukaudessa.</p>
     <div style="display:flex;gap:10px;flex-wrap:wrap">

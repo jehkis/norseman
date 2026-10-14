@@ -45,6 +45,10 @@ Every morning the app shows the day's workout from the plan. I log what I actual
 - Strength progress per exercise (heaviest working set)
 - Plan adherence, totals per sport, full history and backup/restore (JSON)
 
+**Strava import**
+- Connect Strava once; new activities (sport, duration, distance, average heart rate) are imported automatically when the app opens. If the same sport is already logged by hand for that day, Strava only fills in the missing distance and heart rate.
+- A Supabase Edge Function (`supabase/functions/strava`) handles OAuth and the import, so the Strava client secret never reaches the browser.
+
 **Sync**
 - Data is stored in a cloud database, so the app shows the same data on my phone and computer in real time.
 - Installable to the phone home screen (PWA).
@@ -66,6 +70,7 @@ Developed with AI-assisted tooling (Claude).
 Phone / computer  ──►  GitHub Pages (app)  ──►  Supabase
                                                  ├─ Auth (email + password)
                                                  ├─ PostgreSQL: entries, moves, settings (RLS)
+                                                 ├─ Edge Function: Strava OAuth + import
                                                  └─ Realtime sync between devices
 ```
 
@@ -88,6 +93,7 @@ The app would only use the data of the athlete who has authorized it.
 - [x] Daily plan and workout content
 - [x] Manual logging and strength sets
 - [x] Progress charts and cross-device sync
+- [x] Automatic workout import via Strava (Garmin → Strava → diary)
 - [ ] Garmin Activity API: automatic workout import
 - [ ] Garmin Training API: planned workouts to the watch
 - [x] Moving and swapping workouts, hybrid mode
